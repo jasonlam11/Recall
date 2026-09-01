@@ -12,6 +12,43 @@ struct TimelineView: View {
     private var entries: [JournalEntry] { store.entries }
 
     var body: some View {
+        VStack(spacing: 0) {
+            searchField
+            Divider()
+            list
+        }
+    }
+
+    /// An explicit field rather than `.searchable`, whose placement inside a
+    /// NavigationSplitView sidebar on macOS is inconsistent enough that the
+    /// control can end up somewhere the user never finds it.
+    private var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("Search by meaning", text: $search.text)
+                .textFieldStyle(.plain)
+                .onSubmit { search.queryChanged() }
+            if search.isSearching {
+                ProgressView().controlSize(.small)
+            } else if search.isActive {
+                Button {
+                    search.text = ""
+                    search.queryChanged()
+                } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 8))
+        .padding(10)
+        .onChange(of: search.text) { _, _ in search.queryChanged() }
+    }
+
+    private var list: some View {
         List(selection: $selection) {
             if search.isActive {
                 Section(sectionTitle) {
@@ -33,8 +70,7 @@ struct TimelineView: View {
                 }
             }
         }
-        .searchable(text: $search.text, prompt: "Search by meaning")
-        .onChange(of: search.text) { _, _ in search.queryChanged() }
+
         .overlay {
             if search.isActive && search.results.isEmpty && !search.isSearching {
                 ContentUnavailableView.search(text: search.text)

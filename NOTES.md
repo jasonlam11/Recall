@@ -345,3 +345,18 @@ Deleted Xcode's template UI tests. `RecallUITestsLaunchTests` failed on macOS
 after 122s of screenshot attempts — 33 failures from boilerplate. Replaced with
 one launch smoke test (~4s) that asserts the composer appears; that's the single
 failure a unit test genuinely cannot see. The logic worth testing is unit-tested.
+
+---
+
+## 2026-09-01 — Dropped `.searchable` for an explicit field
+
+`.searchable` on a `List` inside a `NavigationSplitView` sidebar didn't surface a
+visible control on macOS — the field went somewhere the user couldn't find it.
+Rather than chase placement values, the sidebar now owns a plain `TextField`
+pinned above the list, with a magnifying glass, an inline progress spinner while
+a query is in flight, and a clear button.
+
+**Tradeoff.** Loses the system search affordances (`⌘F` focus, the platform look).
+Gains a control that is unambiguously present, which for a feature that *is* the
+product is the right trade. Revisit if `.searchable` placement can be pinned
+down; worth filing feedback if the sidebar placement genuinely doesn't render.
