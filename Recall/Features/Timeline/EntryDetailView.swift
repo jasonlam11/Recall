@@ -57,7 +57,7 @@ struct EntryDetailView: View {
                     .font(.callout)
                 } else {
                     Divider()
-                    Label("Not analyzed", systemImage: "sparkles.slash")
+                    Label("Not analyzed", systemImage: "circle.dashed")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }

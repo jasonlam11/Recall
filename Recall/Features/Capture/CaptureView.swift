@@ -19,9 +19,6 @@ struct CaptureView: View {
                 .padding(12)
                 .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 12))
                 .frame(minHeight: 140, maxHeight: 260)
-                .onChange(of: model.text) { _, new in
-                    if new.count == 1 { model.prewarmIfNeeded() }
-                }
 
             HStack {
                 if let message = model.errorMessage {
@@ -47,6 +44,10 @@ struct CaptureView: View {
         .padding(24)
         .animation(.snappy, value: model.partial?.title)
         .animation(.snappy, value: model.isEnriching)
+        // Once, when the composer appears. Previously this fired on every
+        // keystroke that brought the field to one character, creating and
+        // discarding a LanguageModelSession each time.
+        .task { model.prewarmIfNeeded() }
     }
 
     @ViewBuilder

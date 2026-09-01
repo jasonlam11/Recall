@@ -125,8 +125,12 @@ nonisolated final class OnDeviceIntelligenceService: IntelligenceService {
         }
     }
 
-    /// Warms the model while the writer is still typing, so the first token
-    /// after Save doesn't pay cold-start cost.
+    /// Warms the model so the first request after Save pays less cold-start
+    /// cost. Call once — each call builds a session that is then discarded,
+    /// which the framework logs as a cancelled prewarm.
+    ///
+    /// Whether this actually reduces the measured ~5.9s prefill is unverified;
+    /// see the open question in NOTES.md.
     func prewarm() {
         guard availability.isReady else { return }
         LanguageModelSession(instructions: Self.enrichmentInstructions).prewarm()

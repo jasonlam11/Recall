@@ -510,3 +510,36 @@ now assert the weight ordering directly, so reweighting against the evidence
 fails the build instead of quietly degrading search.
 
 Suite: 30 tests, 3 suites, 0.29s.
+
+---
+
+## 2026-09-01 — Two bugs the compiler could not see
+
+Both found by reading the Xcode console after a run, not by building or testing.
+
+**1. `sparkles.slash` is not a real SF Symbol.** `EntryDetailView` used it for the
+"Not analyzed" state. SwiftUI renders a missing symbol as nothing and logs to the
+console — it does not fail to compile and does not throw. Verified against
+`/System/Library/CoreServices/CoreGlyphs.bundle`: `sparkles` exists,
+`sparkles.slash` does not. Now `circle.dashed`.
+
+**Worth generalizing:** every `systemImage:` string is an unchecked runtime
+lookup. Nothing in the type system protects them. Either verify names against the
+symbol database or wrap them in an enum.
+
+**2. `prewarm()` was churning sessions.** It fired from `.onChange` on the text
+field whenever the field reached one character, so typing and deleting a
+character repeatedly built and discarded a `LanguageModelSession`. The console
+filled with "Passing along Session … in Canceled state in response to
+PrewarmSession". Moved to `.task`, so it runs once when the composer appears.
+
+**Open question, now honest.** I never verified that prewarming reduces the
+measured ~5.9s prefill. The doc comment claimed a benefit on the strength of the
+WWDC talk mentioning the API. Comment corrected to say it's unverified. Measure
+it before relying on it — and if it doesn't help, delete it.
+
+**Note on the SIGTERM.** The debugger paused on `Thread 1: signal SIGTERM` in
+`mach_msg2_trap` at 0% CPU. Not a crash — an external terminate arriving while
+the main thread idled (a `pkill` from a test run). Distinguishing "was killed"
+from "crashed" is worth being able to do at a glance: a crash shows an exception
+or a fatal signal like SIGSEGV/SIGABRT, and the paused frame is in your code.
