@@ -69,3 +69,55 @@ guaranteed by the schema, not by hoping the prompt is obeyed.
 - `NLEmbedding.sentenceEmbedding` vs `NLContextualEmbedding` with mean pooling —
   measure retrieval quality on my own entries before committing.
 - Where to draw the context-window boundary in Ask mode once the transcript grows.
+
+---
+
+## 2026-09-01 — Where the abstraction seam goes
+
+**Decision.** Abstract the *service* (`IntelligenceService`), not the model.
+
+**Why not the model.** The plan originally called for injecting a model behind a
+`ModelProviding` protocol. Reading the SDK killed that: `LanguageModelSession.init`
+takes a concrete `SystemLanguageModel`, so there is no polymorphism to exploit at
+that level in macOS 26. The `LanguageModel` protocol from WWDC26 is macOS 27+.
+
+**What this buys anyway.** A fake service for tests that never loads a model, and
+a place to add `CloudIntelligenceService` when PCC ships — same seam, one
+conformance. Better than a protocol that pretends the SDK is more general than it is.
+
+---
+
+## 2026-09-01 — Default actor isolation is MainActor
+
+Xcode 26 templates ship `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` and
+`SWIFT_APPROACHABLE_CONCURRENCY = YES`. Every type is main-actor-isolated unless
+marked otherwise, which is a sane default for an app but wrong for pure values.
+
+First build failed on exactly this: `IntelligenceError.errorDescription` is a
+nonisolated protocol requirement of `LocalizedError`, and it called
+`ModelAvailability.explanation`, which the default had silently made MainActor.
+
+**Decision.** Keep the MainActor default and mark the model/service types
+`nonisolated`: `Mood`, `EntryInsight`, `ModelAvailability`, `IntelligenceError`,
+`IntelligenceService`, `OnDeviceIntelligenceService`. `JournalStore` stays
+`@MainActor` — it wraps SwiftData's `mainContext`, so that isolation is correct
+rather than incidental.
+
+**The rule this encodes.** UI-adjacent types are MainActor; values and services
+that do real work off the main thread are explicitly not.
+
+---
+
+## 2026-09-01 — Enrichment design details
+
+- **Fresh session per entry.** Enrichment is stateless. Reusing one session would
+  accumulate unrelated transcript history and spend context for no benefit.
+- **Instructions vs prompt.** The extraction rules live in `instructions`; the
+  entry text goes in the prompt, delimited. Instructions are the protected channel
+  the model prefers, and journal text is untrusted input that must not be able to
+  redirect behavior. The instructions say so explicitly.
+- **Errors are translated, not leaked.** `GenerationError` maps to
+  `IntelligenceError` so no view ever imports FoundationModels.
+- **`insight` and `embedding` are optional.** An entry saves immediately;
+  enrichment happens after. A model failure leaves a valid entry with no
+  metadata rather than blocking the write.
