@@ -257,3 +257,91 @@ when `refresh()` rebuilds the list, which happens on every save.
 sits below a divider as secondary. The writer's words are the record; the
 model's reading is commentary. An unenriched entry says "Not analyzed" rather
 than hiding the fact.
+
+---
+
+## 2026-09-01 — F3: measured two embedding models, and neither works alone
+
+**Setup.** 10-entry corpus of realistic journal text, two queries with
+hand-labeled targets sharing no keywords with the query. Measured precision@2
+and score spread.
+
+**NLEmbedding.sentenceEmbedding (512-d).** Ranked an entry about a deep-sea
+documentary *above* both targets for "feeling behind on work" (0.2265 vs 0.2025
+and 0.1129). Unusable.
+
+**NLContextualEmbedding, mean-pooled (512-d, 256-token max).**
+
+```
+QUERY "feeling behind on work"        targets 0,2
+  raw       p@2=0.50  spread=0.060  top3: 9(0.828) 0(0.824) 8(0.814)
+  centered  p@2=0.50  spread=0.273  top3: 9(0.144) 0(0.117) 8(0.067)
+
+QUERY "time spent with other people"  targets 1,5,6,9
+  raw       p@2=0.50  spread=0.068  top3: 9(0.860) 0(0.845) 8(0.843)
+  centered  p@2=0.50  spread=0.347  top3: 9(0.165) 3(0.127) 1(0.084)
+```
+
+**Two findings.**
+
+1. **Anisotropy is real and centering fixes it.** Raw scores span 0.06 across the
+   whole corpus — everything is ~0.83 similar to everything. Subtracting the
+   corpus centroid widened that to 0.27–0.35, roughly 4.5x. Worth doing.
+
+2. **Centering does not fix ranking.** p@2 stayed 0.50 both times, and entry 9
+   ranked first for *both* queries despite them being about unrelated things.
+   A vector that wins regardless of the question is not encoding the question.
+
+**Decision: hybrid retrieval, not pure vector search.**
+
+`RetrievalService` combines four weighted signals — centered cosine (0.5),
+topic overlap (0.3), person overlap (0.15), mood match (0.05) — after applying
+hard date/mood filters. Hard filters run first because they only shrink the
+candidate set, so they're strictly cheaper than scoring.
+
+The structured signals are available *because enrichment already ran*. The model
+distilled each entry into topics, people, and a mood, and the retriever reuses
+that instead of asking prose to carry all the meaning. That's the actual
+architectural insight of this project: guided generation isn't just a display
+feature, it produces the index.
+
+Weights are named constants, not magic numbers, so the Week 3 evaluation harness
+can sweep them.
+
+**What I'd have shipped without measuring.** Pure cosine over raw text, which
+would have looked correct, passed every test I'd have written, and returned
+nonsense. The 20 minutes of measurement is the whole reason the design is right.
+
+**Still open.** Whether an LLM rerank pass over the top-20 beats the weighted
+combination. That's F4's job — the model gets candidates via tool calling and
+can reject bad ones.
+
+---
+
+## 2026-09-01 — Indexing is a backlog worker
+
+`Indexer` walks unindexed entries rather than blocking a save. Entries are
+indexed twice: once on raw text immediately (searchable even if enrichment
+fails), then again after the insight lands, because summary + topics + people
+carry more signal than prose alone.
+
+`indexBacklog()` runs on launch, which also backfills entries written before the
+embedding layer existed.
+
+`EmbeddingService` is an `actor` — `NLContextualEmbedding` is a loaded model with
+mutable state, and serializing access keeps it off the main thread without a lock.
+
+---
+
+## 2026-09-01 — Test suite
+
+11 unit tests on `Vector`, with values hand-computed rather than captured from a
+run: a test asserting whatever the code produced can't catch a regression.
+Includes degenerate cases (mismatched lengths, zero vectors, empty) which return
+0 instead of NaN, and a property test that centering widens spread on
+deliberately clustered vectors.
+
+Deleted Xcode's template UI tests. `RecallUITestsLaunchTests` failed on macOS
+after 122s of screenshot attempts — 33 failures from boilerplate. Replaced with
+one launch smoke test (~4s) that asserts the composer appears; that's the single
+failure a unit test genuinely cannot see. The logic worth testing is unit-tested.

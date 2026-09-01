@@ -3,8 +3,10 @@ import SwiftUI
 struct CaptureView: View {
     @State private var model: CaptureViewModel
 
-    init(store: JournalStore, intelligence: any IntelligenceService) {
-        _model = State(initialValue: CaptureViewModel(store: store, intelligence: intelligence))
+    init(store: JournalStore, intelligence: any IntelligenceService, indexer: Indexer) {
+        _model = State(initialValue: CaptureViewModel(
+            store: store, intelligence: intelligence, indexer: indexer
+        ))
     }
 
     var body: some View {

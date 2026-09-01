@@ -16,10 +16,12 @@ final class CaptureViewModel {
 
     private let store: JournalStore
     private let intelligence: any IntelligenceService
+    private let indexer: Indexer
 
-    init(store: JournalStore, intelligence: any IntelligenceService) {
+    init(store: JournalStore, intelligence: any IntelligenceService, indexer: Indexer) {
         self.store = store
         self.intelligence = intelligence
+        self.indexer = indexer
     }
 
     var canSave: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isEnriching }
@@ -48,7 +50,11 @@ final class CaptureViewModel {
 
         text = ""
 
-        // 2. Enrich. Failure here leaves a valid, unenriched entry.
+        // 2. Index on the raw text right away, so the entry is searchable even
+        //    if enrichment fails. It's re-indexed below once the insight lands.
+        await indexer.index(entry)
+
+        // 3. Enrich. Failure here leaves a valid, unenriched entry.
         guard availability.isReady else { return }
         isEnriching = true
         defer { isEnriching = false }
@@ -67,7 +73,7 @@ final class CaptureViewModel {
             return
         }
 
-        // 3. Only persist metadata once it's actually complete.
+        // 4. Only persist metadata once it's actually complete.
         guard let last, let insight = EntryInsight(completed: last) else {
             errorMessage = "The analysis came back incomplete. Your entry is saved."
             return
@@ -76,6 +82,11 @@ final class CaptureViewModel {
             try store.attach(insight, to: entry)
         } catch {
             errorMessage = "Saved the entry, but couldn't save its analysis."
+            return
         }
+
+        // 5. Re-index now that the summary and topics exist — they carry more
+        //    signal than raw prose alone.
+        await indexer.reindex(entry)
     }
 }

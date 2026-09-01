@@ -4,8 +4,17 @@ import SwiftUI
 struct ContentView: View {
     let store: JournalStore
     let intelligence: any IntelligenceService
+    let indexer: Indexer
 
     @State private var selection: PersistentIdentifier?
+    @State private var search: SearchViewModel
+
+    init(store: JournalStore, intelligence: any IntelligenceService, retrieval: RetrievalService, indexer: Indexer) {
+        self.store = store
+        self.intelligence = intelligence
+        self.indexer = indexer
+        _search = State(initialValue: SearchViewModel(retrieval: retrieval, store: store))
+    }
 
     private var selectedEntry: JournalEntry? {
         guard let selection else { return nil }
@@ -14,7 +23,7 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
-            TimelineView(store: store, selection: $selection)
+            TimelineView(store: store, selection: $selection, search: search)
                 .navigationTitle("Recall")
                 .frame(minWidth: 300)
                 .toolbar {
@@ -29,8 +38,11 @@ struct ContentView: View {
             if let selectedEntry {
                 EntryDetailView(entry: selectedEntry)
             } else {
-                CaptureView(store: store, intelligence: intelligence)
+                CaptureView(store: store, intelligence: intelligence, indexer: indexer)
             }
         }
+        // Backfills entries written before embeddings existed, and any whose
+        // indexing was interrupted.
+        .task { await indexer.indexBacklog() }
     }
 }
