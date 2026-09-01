@@ -439,3 +439,74 @@ smoke test asserted only that a window appeared. Slow, flaky, near-zero value.
 
 Suite is now 17 tests in 0.019s. A fast green suite gets run; a 60-second flaky
 one gets ignored.
+
+---
+
+## 2026-09-01 — Extracted `Ranker`, then evaluated it on the real corpus
+
+**Refactor.** Ranking logic was inline in `RetrievalService`, which needed
+SwiftData and `@MainActor`, so it could not be run or measured outside the app.
+Moved it to `Ranker`: plain values in, scores out, synchronous, no framework
+dependency. `RetrievalService` is now a thin adapter that owns the two impure
+parts — hard filters over stored entries, and embedding the query.
+
+The query embedding is *passed into* `Ranker` rather than computed there, which
+is what keeps it synchronous and testable.
+
+**Evaluation.** Built a harness that compiles the real `Ranker`, `LexicalIndex`,
+and `Vector` sources against the 11 real entries pulled from the SwiftData store.
+Results by query, before and after two fixes:
+
+| query | before | after |
+|---|---|---|
+| "wayfair" | 6th (behind gaming, fraternity) | 1st and 2nd, both correct |
+| "gaming" | mixed | correct, top 2 |
+| "gym" | mixed | correct, top 3 |
+| "nervous about the future" | 5 results, ranked partly on "the" | 1 result, correct |
+| "who have I spent time with" | stopword noise | relevant entries top 2 |
+
+**Fix 1: removed the IDF floor.** The `+1` I added meant a term appearing in
+*every* document still scored 1.0. Letting universal terms collapse to exactly 0
+is the point — a word in every entry distinguishes nothing.
+
+**Fix 2: function-word filtering via `NLTagger`.** IDF alone was insufficient:
+"the" appears in 8 of 11 entries, not all 11, so it kept a nonzero weight and
+still ranked an unrelated entry third. Now the tokenizer drops determiners,
+prepositions, conjunctions, pronouns, and particles by grammatical class.
+
+Untagged words are *kept* deliberately — an unrecognized token is more likely a
+name or piece of jargon than a function word, and those are the highest-value
+terms in a journal.
+
+Chose `NLTagger` over a hand-maintained stopword list: it's language-aware,
+already on-device, and doesn't rot.
+
+**Honest assessment of where retrieval stands.**
+
+- Term and topic queries: good. Correct top result every time.
+- Natural-language questions: weak. "nervous about the future" only works
+  because the word "future" happens to appear. The word "nervous" matches
+  nothing, and the vector doesn't rescue it.
+
+That gap is precisely F4's job. The model should turn "nervous about the future"
+into a structured query — `topics: ["future plans"], mood: .anxious` — and let
+the structured signals do the work. Retrieval doesn't need to understand
+language; the model does, and then retrieval matches on what it produced.
+
+**Remaining nit.** "have" survives tokenization (tagged `.verb`, not a function
+word). IDF keeps its weight low. Not worth a special case.
+
+---
+
+## 2026-09-01 — Evaluation as tests, not as a report
+
+`RankerTests` — 12 assertions over a labeled 5-entry corpus that mirrors the real
+one: overlapping topics, repeated common words, one rare proper noun.
+
+The point is that the earlier bug — weighting the vector at 0.5 after measuring
+it unreliable — was *documented in this file and contradicted by the code*,
+because nothing checked that the weights followed the measurements. Two tests
+now assert the weight ordering directly, so reweighting against the evidence
+fails the build instead of quietly degrading search.
+
+Suite: 30 tests, 3 suites, 0.29s.

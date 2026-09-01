@@ -54,13 +54,45 @@ struct LexicalIndexTests {
         #expect(LexicalIndex(documents: []).score(query: "anything", against: "text") == 0)
     }
 
-    @Test("Tokenizer lowercases, splits on punctuation, drops short words")
-    func tokenizer() {
-        let tokens = LexicalIndex.tokenize("Wayfair's Q4 offer — is it in?")
+    @Test("Tokenizer keeps content words and lowercases them")
+    func tokenizerKeepsContentWords() {
+        let tokens = LexicalIndex.tokenize("Wayfair offer finally arrived")
         #expect(tokens.contains("wayfair"))
         #expect(tokens.contains("offer"))
-        #expect(!tokens.contains("is"))   // too short
-        #expect(!tokens.contains("it"))   // too short
-        #expect(!tokens.contains("wayfair's"))  // apostrophe splits
+        #expect(tokens.contains("arrived"))
+    }
+
+    @Test("Tokenizer drops function words by grammatical class")
+    func tokenizerDropsFunctionWords() {
+        // Determiners, prepositions, and pronouns carry structure, not meaning.
+        let tokens = LexicalIndex.tokenize("nervous about the future with them")
+        #expect(tokens.contains("nervous"))
+        #expect(tokens.contains("future"))
+        #expect(!tokens.contains("the"), "determiner should be dropped")
+        #expect(!tokens.contains("about"), "preposition should be dropped")
+        #expect(!tokens.contains("with"), "preposition should be dropped")
+        #expect(!tokens.contains("them"), "pronoun should be dropped")
+    }
+}
+
+extension LexicalIndexTests {
+
+    /// The bug this guards: an earlier IDF formula added a +1 floor, so a word
+    /// in every document still scored 1.0. "nervous about the future" then
+    /// ranked an unrelated entry third on the strength of "the".
+    @Test("A term in every document contributes nothing")
+    func universalTermIsWorthless() {
+        let docs = [
+            "the quick brown fox jumped",
+            "the lazy dog slept all day",
+            "the rain fell on the roof",
+        ]
+        let index = LexicalIndex(documents: docs)
+        // "the" is in all three, so a query of only "the" has zero weight.
+        #expect(index.score(query: "the", against: docs[0]) == 0)
+        // And it can't prop up a query alongside a real term.
+        #expect(index.score(query: "the fox", against: docs[1]) == 0,
+                "matching only the universal term is no evidence")
+        #expect(index.score(query: "the fox", against: docs[0]) == 1.0)
     }
 }

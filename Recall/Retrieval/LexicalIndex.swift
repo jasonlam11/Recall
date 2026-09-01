@@ -1,4 +1,5 @@
 import Foundation
+import NaturalLanguage
 
 /// Term matching weighted by how rare each term is in the corpus.
 ///
@@ -22,10 +23,16 @@ nonisolated struct LexicalIndex {
                 frequency[term, default: 0] += 1
             }
         }
-        // Smoothed IDF: +1 everywhere keeps a term present in every document
-        // from collapsing to zero, and avoids division by zero on an empty set.
+        // IDF, deliberately *without* a floor constant.
+        //
+        // An earlier version added +1, so a term appearing in every document
+        // still scored 1.0. That let stopwords manufacture matches: the query
+        // "nervous about the future" ranked an unrelated entry third on the
+        // strength of the word "the" alone. Letting a universal term collapse
+        // to exactly 0 is the point — a word in every entry distinguishes
+        // nothing, so it should contribute nothing.
         let n = Double(max(documents.count, 1))
-        idf = frequency.mapValues { log((n + 1) / (Double($0) + 1)) + 1 }
+        idf = frequency.mapValues { max(0, log((n + 1) / (Double($0) + 1))) }
     }
 
     /// Fraction of the query's *evidential weight* found in this text.
@@ -40,9 +47,9 @@ nonisolated struct LexicalIndex {
         var total = 0.0
         var matched = 0.0
         for term in queryTerms {
-            // An unseen term is maximally rare, so weight it like a term that
-            // appears in exactly one document.
-            let weight = idf[term] ?? (log(Double(max(documentCount, 1)) + 1) + 1)
+            // An unseen term is maximally rare: weight it as if it appeared in
+            // no document at all.
+            let weight = idf[term] ?? log(Double(max(documentCount, 1)) + 1)
             total += weight
             if textTerms.contains(term) { matched += weight }
         }
@@ -50,15 +57,44 @@ nonisolated struct LexicalIndex {
         return Float(matched / total)
     }
 
-    /// Lowercased alphanumeric runs of 3+ characters.
+    /// Content words only, lowercased.
     ///
-    /// The length floor drops most stopwords without maintaining a stopword
-    /// list, and IDF handles whatever slips through — a term in every document
-    /// carries almost no weight regardless.
+    /// Function words are removed by *grammatical class* using `NLTagger`
+    /// rather than by a hand-maintained stopword list. IDF alone was not
+    /// enough: "the" appears in 8 of 11 entries, not all 11, so it kept a
+    /// nonzero weight and the query "nervous about the future" ranked an
+    /// unrelated entry on the strength of "the" alone.
+    ///
+    /// Dropping determiners, prepositions, conjunctions, pronouns, and
+    /// particles leaves the words that carry the query's meaning. Untagged
+    /// words are kept — an unrecognized word is more likely a name or jargon
+    /// than a function word, and those are exactly the high-value terms.
     static func tokenize(_ text: String) -> [String] {
-        text.lowercased()
-            .split { !$0.isLetter && !$0.isNumber }
-            .map(String.init)
-            .filter { $0.count >= 3 }
+        guard !text.isEmpty else { return [] }
+
+        let tagger = NLTagger(tagSchemes: [.lexicalClass])
+        tagger.string = text
+
+        var terms: [String] = []
+        tagger.enumerateTags(
+            in: text.startIndex..<text.endIndex,
+            unit: .word,
+            scheme: .lexicalClass,
+            options: [.omitPunctuation, .omitWhitespace]
+        ) { tag, range in
+            let word = text[range].lowercased()
+            guard word.count >= 3, word.contains(where: { $0.isLetter || $0.isNumber }) else {
+                return true
+            }
+            if let tag, Self.functionWordClasses.contains(tag) { return true }
+            terms.append(String(word))
+            return true
+        }
+        return terms
     }
+
+    /// Grammatical classes that carry structure rather than meaning.
+    private static let functionWordClasses: Set<NLTag> = [
+        .determiner, .preposition, .conjunction, .pronoun, .particle, .interjection
+    ]
 }
