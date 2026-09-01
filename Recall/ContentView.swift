@@ -1,24 +1,16 @@
-//
-//  ContentView.swift
-//  Recall
-//
-//  Created by Jason Lam on 9/1/26.
-//
-
 import SwiftUI
 
 struct ContentView: View {
-    var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
-        }
-        .padding()
-    }
-}
+    let store: JournalStore
+    let intelligence: any IntelligenceService
 
-#Preview {
-    ContentView()
+    var body: some View {
+        NavigationSplitView {
+            TimelineView(store: store)
+                .navigationTitle("Recall")
+                .frame(minWidth: 280)
+        } detail: {
+            CaptureView(store: store, intelligence: intelligence)
+        }
+    }
 }

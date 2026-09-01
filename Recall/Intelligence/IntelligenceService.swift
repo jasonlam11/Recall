@@ -12,6 +12,10 @@ import FoundationModels
 nonisolated protocol IntelligenceService: Sendable {
     var availability: ModelAvailability { get }
     func enrich(entryText: String) async throws -> EntryInsight
+
+    /// Streams progressively-filled snapshots so the UI can render generation
+    /// as it happens rather than after it finishes.
+    func enrichStream(entryText: String) -> AsyncThrowingStream<EntryInsight.PartiallyGenerated, any Error>
 }
 
 /// Errors surfaced to the UI. Framework errors are deliberately translated
@@ -85,6 +89,45 @@ nonisolated final class OnDeviceIntelligenceService: IntelligenceService {
         } catch {
             throw IntelligenceError.failed(error.localizedDescription)
         }
+    }
+
+    func enrichStream(entryText: String) -> AsyncThrowingStream<EntryInsight.PartiallyGenerated, any Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                let availability = self.availability
+                guard availability.isReady else {
+                    continuation.finish(throwing: IntelligenceError.unavailable(availability))
+                    return
+                }
+
+                let session = LanguageModelSession(instructions: Self.enrichmentInstructions)
+                do {
+                    let stream = session.streamResponse(
+                        to: "Analyze the journal entry below.\n\n---\n\(entryText)\n---",
+                        generating: EntryInsight.self
+                    )
+                    // Each element is a Snapshot wrapping the partial value —
+                    // the WWDC25 talk yielded the partial directly; the shipping
+                    // SDK wraps it.
+                    for try await snapshot in stream {
+                        continuation.yield(snapshot.content)
+                    }
+                    continuation.finish()
+                } catch let error as LanguageModelSession.GenerationError {
+                    continuation.finish(throwing: Self.translate(error))
+                } catch {
+                    continuation.finish(throwing: IntelligenceError.failed(error.localizedDescription))
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// Warms the model while the writer is still typing, so the first token
+    /// after Save doesn't pay cold-start cost.
+    func prewarm() {
+        guard availability.isReady else { return }
+        LanguageModelSession(instructions: Self.enrichmentInstructions).prewarm()
     }
 
     private static func translate(_ error: LanguageModelSession.GenerationError) -> IntelligenceError {

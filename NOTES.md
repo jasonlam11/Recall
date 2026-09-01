@@ -121,3 +121,71 @@ that do real work off the main thread are explicitly not.
 - **`insight` and `embedding` are optional.** An entry saves immediately;
   enrichment happens after. A model failure leaves a valid entry with no
   metadata rather than blocking the write.
+
+---
+
+## 2026-09-01 — Streaming: measured, and what it actually buys
+
+Instrumented the snapshot stream on a real entry. Six snapshots over 6.56s:
+
+```
+[ 5.92s] #1  title set,      people/topics/loops nil
+[ 6.14s] #3  people=1
+[ 6.28s] #4  people=2, topics=2
+[ 6.51s] #6  people=2, topics=3, loops=2
+```
+
+**Two findings.**
+
+1. **Fields fill in declaration order**, confirming the WWDC25 claim. `title` and
+   `summary` are declared first, so they land first. This is not cosmetic —
+   earlier fields condition later ones, so declaration order affects output
+   quality as well as animation.
+
+2. **~90% of the latency is prefill.** Nothing for 5.92s, then the whole
+   structure completes in 0.64s. Streaming does *not* meaningfully reduce
+   perceived wait here; it only makes the last half-second pretty.
+
+**Consequence.** `prewarm()` matters more than streaming for perceived speed, so
+it fires on the writer's first keystroke rather than at save time. Streaming is
+still worth keeping — it proves progress and avoids a dead-looking UI — but I
+should be honest that it is not the latency fix.
+
+**Open follow-up.** Measure whether `.contentTagging` has different prefill cost
+than the general model, and whether prewarm actually collapses that 5.9s.
+
+---
+
+## 2026-09-01 — Snapshot API differs from the talk (again)
+
+WWDC25 shows `for try await partial in stream` where the element *is* the
+partially generated value. The shipping SDK wraps it:
+
+```swift
+public struct ResponseStream<Content> where Content: Generable {
+    public struct Snapshot {
+        public var content: Content.PartiallyGenerated
+        public var rawContent: GeneratedContent
+    }
+}
+```
+
+So it is `snapshot.content`. Second divergence from the talk after `ToolOutput`.
+Lesson: read the `.swiftinterface`, not the slides.
+
+---
+
+## 2026-09-01 — Save order is a product decision
+
+`CaptureViewModel.save()` persists the entry *before* enrichment starts, and
+clears the text field immediately. If the model fails, is unavailable, or returns
+an incomplete structure, the writer still has their entry.
+
+`EntryInsight.init?(completed:)` is failable for the same reason: a
+`PartiallyGenerated` with nil fields must not be silently coerced into a
+"complete" insight. Incomplete analysis is reported as such and the entry stays
+unenriched, which the timeline renders by falling back to raw text.
+
+**Why this matters.** The alternative — block the save on enrichment — would lose
+a person's writing to a model error. For a journal that is unacceptable, so
+intelligence is strictly additive everywhere in this app.

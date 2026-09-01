@@ -27,3 +27,22 @@ nonisolated struct EntryInsight: Codable, Sendable, Equatable {
     @Guide(description: "Unresolved threads the writer should revisit later.", .maximumCount(3))
     var openLoops: [String]
 }
+
+extension EntryInsight {
+    /// Assembles a finished insight from the last streamed snapshot.
+    ///
+    /// `PartiallyGenerated` has every property optional because a snapshot can
+    /// arrive mid-generation. Returning `nil` when a field is still missing keeps
+    /// "partly generated" from masquerading as a complete result.
+    init?(completed partial: EntryInsight.PartiallyGenerated) {
+        guard let title = partial.title,
+              let summary = partial.summary,
+              let mood = partial.mood else { return nil }
+        self.title = title
+        self.summary = summary
+        self.people = partial.people ?? []
+        self.topics = partial.topics ?? []
+        self.mood = mood
+        self.openLoops = partial.openLoops ?? []
+    }
+}
