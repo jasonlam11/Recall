@@ -235,3 +235,25 @@ place.
 **The lesson worth keeping.** Both got through a clean build and a passing spike.
 Neither would have been caught by a unit test I'd have thought to write. Using
 the thing is a distinct kind of testing.
+
+---
+
+## 2026-09-01 — Detail view, and why there's no tab bar
+
+Entries were listed but unopenable. Added `EntryDetailView` and made the sidebar
+selectable.
+
+**Layout decision.** The detail column shows the composer when nothing is
+selected and the entry when something is. One column, two modes, driven by a
+single `PersistentIdentifier?`. The alternative — tabs, or a sheet over the
+composer — adds a navigation concept for no gain, since writing and reading are
+never wanted simultaneously. A "New Entry" toolbar button clears the selection.
+
+**Selection type.** `PersistentIdentifier`, not the `JournalEntry` object.
+Selecting by identity means the selection survives the entry being refetched
+when `refresh()` rebuilds the list, which happens on every save.
+
+**Content hierarchy.** The raw text is primary and always shown; model output
+sits below a divider as secondary. The writer's words are the record; the
+model's reading is commentary. An unenriched entry says "Not analyzed" rather
+than hiding the fact.
