@@ -32,12 +32,23 @@ final class RetrievalService {
 
     private let embeddings: EmbeddingService
 
-    /// Relative weight of each signal. Kept as named constants rather than
-    /// magic numbers so the evaluation harness can sweep them later.
-    private static let vectorWeight: Float = 0.5
-    private static let topicWeight: Float = 0.3
-    private static let personWeight: Float = 0.15
+    /// Relative weight of each signal. Named constants rather than magic
+    /// numbers so the evaluation harness can sweep them later.
+    ///
+    /// Lexical dominates because it was *measured* to be the reliable signal and
+    /// the vector was measured to be weak (NOTES.md). The first weighting had
+    /// this backwards — vector at 0.5 — and buried an exact-term match six rows
+    /// down under unrelated entries that merely scored "similar in meaning".
+    private static let lexicalWeight: Float = 0.6
+    private static let topicWeight: Float = 0.2
+    private static let personWeight: Float = 0.1
     private static let moodWeight: Float = 0.05
+    private static let vectorWeight: Float = 0.15
+
+    /// Results below this are dropped. Without a floor, the vector signal gives
+    /// every entry in the corpus a nonzero score and a one-word query "matches"
+    /// everything.
+    private static let minimumScore: Float = 0.08
 
     init(embeddings: EmbeddingService) {
         self.embeddings = embeddings
@@ -73,10 +84,30 @@ final class RetrievalService {
         }
         let ceiling = vectorScores.values.max() ?? 0
 
-        // 3. Combine.
+        // 3. Lexical signal over the text the writer actually wrote, plus the
+        //    model's summary. IDF is computed over the candidate set so rarity
+        //    is relative to this corpus.
+        let lexicon = LexicalIndex(documents: candidates.map(searchableText))
+        var lexicalScores: [PersistentIdentifier: Float] = [:]
+        if !query.text.isEmpty {
+            for entry in candidates {
+                lexicalScores[entry.id] = lexicon.score(
+                    query: query.text, against: searchableText(entry)
+                )
+            }
+        }
+        let anyLexicalMatch = lexicalScores.values.contains { $0 > 0 }
+
+        // 4. Combine.
         let results: [Result] = candidates.map { entry in
             var score: Float = 0
             var reasons: [String] = []
+
+            let lexical = lexicalScores[entry.id] ?? 0
+            if lexical > 0 {
+                score += Self.lexicalWeight * lexical
+                reasons.append("mentions \"\(matchedTerms(query.text, in: entry).joined(separator: ", "))\"")
+            }
 
             if ceiling > 0, let raw = vectorScores[entry.id] {
                 // Normalized against the best match so weights stay comparable
@@ -104,14 +135,42 @@ final class RetrievalService {
             return Result(entry: entry, score: score, reasons: reasons)
         }
 
-        return results
-            .filter { $0.score > 0 }
+        // 5. When the query matches real words somewhere in the corpus, trust
+        //    that and drop entries held up only by the weak vector signal.
+        //    When nothing matches lexically — "feeling behind on work", where no
+        //    entry shares a term — fall back to the vector, which is exactly the
+        //    case it exists for.
+        let filtered = anyLexicalMatch
+            ? results.filter { ($0.reasons.first?.hasPrefix("mentions") ?? false) || $0.score >= Self.lexicalWeight * 0.5 }
+            : results
+
+        return filtered
+            .filter { $0.score >= Self.minimumScore }
             .sorted { $0.score > $1.score }
             .prefix(query.limit)
             .map { $0 }
     }
 
     // MARK: - Text helpers
+
+    /// Everything about an entry that a query can legitimately match: the
+    /// writer's own words first, then the model's derived metadata.
+    private func searchableText(_ entry: JournalEntry) -> String {
+        var parts = [entry.text]
+        if let insight = entry.insight {
+            parts.append(insight.title)
+            parts.append(insight.summary)
+            parts.append(insight.topics.joined(separator: " "))
+            parts.append(insight.people.joined(separator: " "))
+        }
+        return parts.joined(separator: " ")
+    }
+
+    /// Which query terms actually appear, for the "why it matched" line.
+    private func matchedTerms(_ query: String, in entry: JournalEntry) -> [String] {
+        let present = Set(LexicalIndex.tokenize(searchableText(entry)))
+        return Array(Set(LexicalIndex.tokenize(query)).filter(present.contains)).sorted()
+    }
 
     /// Lowercased words of length > 3, which drops most stopwords without
     /// maintaining a stopword list.

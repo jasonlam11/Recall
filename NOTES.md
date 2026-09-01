@@ -360,3 +360,82 @@ a query is in flight, and a clear button.
 Gains a control that is unambiguously present, which for a feature that *is* the
 product is the right trade. Revisit if `.searchable` placement can be pinned
 down; worth filing feedback if the sidebar placement genuinely doesn't render.
+
+---
+
+## 2026-09-01 — Ranking was wrong, diagnosed from one real search
+
+Searched "wayfair" over 9 entries. The entry explicitly about waiting for a
+Wayfair offer ranked **6th**. Above it: gaming achievements, fraternity plans,
+Roblox habits — all matched on "similar in meaning" alone.
+
+**Three separate bugs.**
+
+1. **The entry text was never searched.** `overlap()` compared query tokens
+   against `insight.topics` and `insight.people` only. A literal word in the
+   writer's own prose contributed *nothing* to the score. The one reason
+   "wayfair" matched at all was a mis-tagged person field.
+
+2. **The weakest signal had the highest weight.** I measured the vector as
+   unreliable and then weighted it 0.5 — more than everything else combined.
+   An exact-term match was worth 0.15. The measurement was right there in this
+   file and the weights contradicted it.
+
+3. **"Wayfair" was extracted as a person.** It's a company.
+
+**Fixes.**
+
+- **`LexicalIndex`**: IDF-weighted term matching over the writer's own words plus
+  the model's title/summary/topics/people. A term's evidential value depends on
+  its rarity — "wayfair" in 1 of 9 entries is strong evidence; "work" in 6 of 9
+  is nearly none. Scores are normalized by the query's total IDF, so matching one
+  rare term beats matching two common ones.
+- **Reweighted**: lexical 0.6, topic 0.2, person 0.1, mood 0.05, vector 0.15.
+  The order now follows the measurements instead of contradicting them.
+- **Adaptive fallback**: if the query matches real words anywhere in the corpus,
+  entries held up only by the vector signal are dropped. If nothing matches
+  lexically — "feeling behind on work", where no entry shares a term — the vector
+  ranks, which is the case it exists for. Strong signal when available, weak
+  signal when it's all there is.
+- **Score floor (0.08)**: without one, the vector gave every entry a nonzero
+  score and a one-word query "matched" all 9.
+- **Instructions**: `people` is individual humans only; companies, employers,
+  schools, teams, products, and places go in `topics`.
+
+**The lesson.** The measurement was correct and already written down, and the
+implementation still contradicted it. Measuring isn't enough — the weights have
+to be derived from the numbers, and nothing checked that they were. An argument
+for the evaluation harness being a test, not a report.
+
+---
+
+## 2026-09-01 — A test that was wrong, not code that was wrong
+
+`rarityBeatsFrequency` compared `score("wayfair", doc0)` against
+`score("work", doc1)` and expected the first to be larger. Both are 1.0: scores
+are normalized by the query's total IDF, so a single-term query that matches
+scores 1.0 by construction.
+
+That normalization is deliberate — it makes ranking within one query meaningful
+and comparison across different queries meaningless. The test asserted a property
+the design doesn't have. Replaced with one that tests within-query behavior: for
+"wayfair work", the rare half is worth more than the common half, and the two
+sum to 1.0.
+
+Worth remembering: a failing test is a hypothesis about the code, not a verdict.
+
+---
+
+## 2026-09-01 — Shared scheme, and dropping the UI test
+
+There was no `.xcscheme` on disk — Xcode auto-generates schemes into
+`xcuserdata`, which is gitignored, so `xcodebuild` behavior wasn't reproducible
+and wouldn't survive a clone. Added a shared scheme under `xcshareddata`.
+
+The scheme's test action includes `RecallTests` only. `RecallUITests` was
+removed: `XCUIApplication.launch()` hung for 60s on this macOS target even
+though the app launches fine by hand (confirmed by screenshot), and the single
+smoke test asserted only that a window appeared. Slow, flaky, near-zero value.
+
+Suite is now 17 tests in 0.019s. A fast green suite gets run; a 60-second flaky
+one gets ignored.
