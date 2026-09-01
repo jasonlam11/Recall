@@ -16,7 +16,7 @@ struct CaptureView: View {
                 .scrollContentBackground(.hidden)
                 .padding(12)
                 .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 12))
-                .frame(minHeight: 180)
+                .frame(minHeight: 140, maxHeight: 260)
                 .onChange(of: model.text) { _, new in
                     if new.count == 1 { model.prewarmIfNeeded() }
                 }
@@ -75,6 +75,7 @@ private struct InsightCard: View {
             HStack {
                 Text(partial.title ?? "…")
                     .font(.headline)
+                    .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
                 Spacer()
                 if let mood = partial.mood {
@@ -90,6 +91,9 @@ private struct InsightCard: View {
                 Text(summary)
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                    // Without this the summary is compressed to one truncated
+                    // line whenever the window is short.
+                    .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
             }
 

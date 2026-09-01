@@ -5,7 +5,8 @@ import SwiftUI
 /// intelligence layer storage-agnostic.
 struct TimelineView: View {
     let store: JournalStore
-    @State private var entries: [JournalEntry] = []
+
+    private var entries: [JournalEntry] { store.entries }
 
     var body: some View {
         List {
@@ -40,11 +41,6 @@ struct TimelineView: View {
                 )
             }
         }
-        .task { reload() }
-        .refreshable { reload() }
-    }
-
-    private func reload() {
-        entries = (try? store.allEntries()) ?? []
+        .refreshable { store.refresh() }
     }
 }

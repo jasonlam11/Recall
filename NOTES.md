@@ -189,3 +189,49 @@ unenriched, which the timeline renders by falling back to raw text.
 **Why this matters.** The alternative — block the save on enrichment — would lose
 a person's writing to a model error. For a journal that is unacceptable, so
 intelligence is strictly additive everywhere in this app.
+
+---
+
+## 2026-09-01 — Timeline refresh: how the store signals change
+
+**Symptom.** Saved entries didn't appear in the timeline. The data was fine —
+two rows in SQLite — but `TimelineView` fetched once in `.task` and never again.
+
+**Options considered.**
+1. `@Query` in the view. Idiomatic SwiftUI and would have worked immediately,
+   but it puts SwiftData directly in the view layer and breaks the rule that the
+   store is the only type that touches persistence.
+2. `NotificationCenter` post on save. Works, but it's untyped, easy to forget at
+   a new call site, and the compiler can't help.
+3. **Chosen:** make `JournalStore` `@Observable` and give it a cached
+   `entries` array that every mutation rebuilds via one private `refresh()`.
+
+**Why 3.** Observation tracks the property access in `body`, so views update
+with no subscription code, and the boundary holds — views still never import
+SwiftData. Because every mutating method funnels through `refresh()`, a future
+method that forgets to call it is a visible omission in one small file rather
+than a silent bug spread across views.
+
+`container` and the `context` accessor are `@ObservationIgnored` — they never
+change, so tracking them would just add noise.
+
+---
+
+## 2026-09-01 — Two bugs found by actually using it
+
+Both invisible to the compiler, found in the first real session:
+
+**1. The summary truncated to one line.** `Text` inside a `VStack` gets
+compressed when vertical space runs short, and truncates rather than wrapping.
+Fixed with `.fixedSize(horizontal: false, vertical: true)` on the title and
+summary, and by capping the editor's height instead of letting it grow.
+
+**2. The model tagged me as a person.** An entry written in first person came
+back with `people: ["Jason"]`. Technically defensible — the name was in the text
+— but useless: every entry would list the writer. Fixed in `instructions`, not
+in post-processing, because the model should never generate it in the first
+place.
+
+**The lesson worth keeping.** Both got through a clean build and a passing spike.
+Neither would have been caught by a unit test I'd have thought to write. Using
+the thing is a distinct kind of testing.
