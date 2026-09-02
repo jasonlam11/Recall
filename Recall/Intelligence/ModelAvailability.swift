@@ -3,7 +3,7 @@ import FoundationModels
 /// App-level view of whether intelligence features can run.
 ///
 /// Recall is a working journal with or without a model. This type exists so the
-/// UI can degrade honestly — explaining *why* a feature is missing — instead of
+/// UI can degrade honestly, explaining why a feature is missing, instead of
 /// hiding buttons or failing silently.
 nonisolated enum ModelAvailability: Equatable {
     case ready

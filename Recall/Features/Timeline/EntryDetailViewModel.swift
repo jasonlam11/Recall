@@ -49,7 +49,7 @@ final class EntryDetailViewModel {
     /// Saves edited text, then regenerates everything derived from it.
     ///
     /// The text is committed first and separately. If analysis then fails the
-    /// edit still stands — the entry is simply unanalyzed, which the detail view
+    /// edit still stands. The entry is simply unanalyzed, which the detail view
     /// shows honestly rather than leaving stale metadata describing text that no
     /// longer exists.
     func saveEdits() async {
@@ -72,7 +72,7 @@ final class EntryDetailViewModel {
 
     /// Re-runs enrichment without changing the writing.
     ///
-    /// Useful when the prompt has improved since the entry was written — early
+    /// Useful when the prompt has improved since the entry was written. Early
     /// entries were tagged with the writer themselves and with pronouns as
     /// people, before those instructions were fixed.
     func reanalyze() async {

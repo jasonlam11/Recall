@@ -57,7 +57,7 @@ final class CaptureViewModel {
         defer { isEnriching = false }
 
         // 4. Enrich, persist, and re-index. A failure here leaves a valid,
-        //    unenriched entry — the writing is already safe.
+        //    unenriched entry. The writing is already safe.
         do {
             try await enricher.enrich(entry) { partial = $0 }
         } catch let error as IntelligenceError {

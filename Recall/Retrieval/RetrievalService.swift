@@ -19,7 +19,7 @@ final class RetrievalService {
     struct Result: Identifiable {
         let entry: JournalEntry
         let score: Float
-        /// Why this entry matched — surfaced so ranking isn't a black box.
+        /// Why this entry matched, surfaced so ranking isn't a black box.
         let reasons: [String]
         var id: PersistentIdentifier { entry.id }
     }

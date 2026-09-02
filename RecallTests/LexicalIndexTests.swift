@@ -15,7 +15,7 @@ struct LexicalIndexTests {
     @Test("Within one query, the rare term carries most of the weight")
     func rarityDominatesWithinAQuery() {
         // Scores are normalized by the query's total IDF, so comparing across
-        // two different queries is meaningless by design — only ranking within
+        // two different queries is meaningless by design. Only ranking within
         // a single query matters. This asserts that property directly: for
         // "kestrel work", the rare term is worth more than the common one.
         let index = LexicalIndex(documents: corpus)
@@ -112,7 +112,7 @@ extension LexicalIndexTests {
             "kayaking on the river at dawn",
         ]
         let index = LexicalIndex(documents: docs)
-        // "have" is in 3 of 4 — above the half-corpus threshold.
+        // "have" is in 3 of 4, above the half-corpus threshold.
         #expect(index.score(query: "have", against: docs[0]) == 0)
         // A genuinely rare term still scores.
         #expect(index.score(query: "kayaking", against: docs[3]) == 1.0)
@@ -124,7 +124,7 @@ extension LexicalIndexTests {
     /// The bug this guards: NLTagger classified an unfamiliar proper noun as an
     /// interjection when it was followed by another word, so grammatical
     /// filtering silently deleted it. `tokenize("kestrel work")` returned
-    /// `["work"]` — losing the single most valuable kind of query term.
+    /// `["work"]`, losing the single most valuable kind of query term.
     @Test("An unfamiliar proper noun survives tokenization")
     func rareProperNounSurvives() {
         #expect(LexicalIndex.tokenize("kestrel") == ["kestrel"])

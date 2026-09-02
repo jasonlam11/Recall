@@ -3,7 +3,7 @@ import Foundation
 /// Runs enrichment for one entry and persists the result.
 ///
 /// Extracted from `CaptureViewModel` when editing arrived and needed the exact
-/// same sequence — stream an insight, refuse to store a partial one, re-index
+/// same sequence: stream an insight, refuse to store a partial one, re-index
 /// once the summary and topics exist. Duplicating that would have meant two
 /// places to get the failure ordering wrong.
 @MainActor
@@ -44,7 +44,7 @@ final class EntryEnricher {
         }
         try store.attach(insight, to: entry)
 
-        // Re-index now that summary, topics, and open loops exist — they carry
+        // Re-index now that summary, topics, and open loops exist. They carry
         // more signal than raw prose alone.
         await indexer.reindex(entry)
     }

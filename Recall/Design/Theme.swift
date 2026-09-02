@@ -2,19 +2,15 @@ import SwiftUI
 
 /// The app's visual vocabulary, in one place.
 ///
-/// Spacing and type had been chosen ad hoc per view — nine different padding
-/// values across five files — which is the difference between a screen that
-/// looks composed and one that looks assembled. A scale means every decision is
-/// already made.
+/// Replaces nine ad hoc padding values chosen per view.
 nonisolated enum Theme {
 
     // MARK: - Colour
 
     /// Warm off-white in light, warm charcoal in dark. Deliberately not pure
-    /// white or pure black: paper isn't, and the warmth is most of what makes
-    /// a writing surface feel inviting rather than clinical.
+    /// white or black.
     static let paper = Color("PaperBackground")
-    /// Raised surfaces — cards, the composer, chips.
+    /// Raised surfaces: cards, the composer, chips.
     static let surface = Color("PaperSurface")
     static let ink = Color("InkPrimary")
     static let inkSecondary = Color("InkSecondary")
@@ -40,37 +36,33 @@ nonisolated enum Theme {
         static let card: CGFloat = 10
     }
 
-    /// The comfortable reading measure. Long lines are tiring, and an entry
-    /// stretched across a wide window is the fastest way to make writing feel
-    /// like filling in a field.
+    /// Comfortable reading measure. Long lines are tiring to read.
     static let readingWidth: CGFloat = 620
 
     // MARK: - Type
 
     enum Font {
-        /// Entry text and model prose. Serif because this is the app's reading
-        /// surface, and it separates the writer's words from the interface
-        /// around them at a glance.
+        /// Entry text and model prose. Serif separates the writer's words
+        /// from the interface around them.
         static let entry = SwiftUI.Font.system(.body, design: .serif)
         static let entryLarge = SwiftUI.Font.system(.title3, design: .serif)
         static let title = SwiftUI.Font.system(.title2, design: .serif).weight(.semibold)
         static let display = SwiftUI.Font.system(.largeTitle, design: .serif).weight(.semibold)
 
-        /// Interface text stays in the system face — labels, buttons, and
-        /// metadata are chrome, and shouldn't compete with the writing.
+        /// Interface text stays in the system face so it doesn't compete with
+        /// the writing.
         static let label = SwiftUI.Font.callout
         static let meta = SwiftUI.Font.caption
         static let metaBold = SwiftUI.Font.caption.weight(.semibold)
     }
 
-    /// Line spacing for prose. Roughly 1.5x, which is what makes a block of
-    /// text feel like a page rather than a paragraph in a dialog.
+    /// Roughly 1.5x, so a block of text reads as a page.
     static let proseLineSpacing: CGFloat = 6
 }
 
 extension Mood {
-    /// Each mood gets a hue so the timeline can be scanned by feeling.
-    /// Desaturated on purpose — these sit behind text and must never shout.
+    /// A hue per mood, so the timeline can be scanned by feeling. Desaturated
+    /// because these sit behind text.
     var tint: Color {
         switch self {
         case .calm:       Color(red: 0.42, green: 0.55, blue: 0.58)
@@ -86,8 +78,7 @@ extension Mood {
 
 // MARK: - Shared components
 
-/// A small labelled pill. Used for topics, people, and moods so all three read
-/// as the same kind of thing.
+/// A small labelled pill, shared by topics, people, and moods.
 struct Chip: View {
     let text: String
     var symbol: String?
@@ -109,8 +100,8 @@ struct Chip: View {
 extension View {
     /// Prominent when active, plain otherwise.
     ///
-    /// `PrimitiveButtonStyle` conformances are distinct types, so a ternary
-    /// can't select between them — this needs a branch in the view builder.
+    /// Button styles are distinct types, so a ternary can't choose between
+    /// them. Needs a view-builder branch.
     @ViewBuilder
     func modeButtonStyle(active: Bool) -> some View {
         if active {

@@ -4,17 +4,13 @@ import SwiftData
 
 /// Lets the model search the journal.
 ///
-/// The interesting part is `Arguments`. Because tool calling is built on guided
-/// generation, the argument schema *is* the query-understanding step — the model
-/// fills in content terms, an optional mood, and an optional timeframe, and
-/// constrained decoding guarantees they're well-formed. There is no separate
-/// "parse the question" pass, and no room for a malformed query.
+/// `Arguments` is the query-understanding step. Tool calling is built on guided
+/// generation, so the schema itself constrains the query and there's no separate
+/// parse pass.
 ///
-/// This is what closes the gap the retrieval evaluation exposed. `Ranker` could
-/// never handle "nervous about the future", because "nervous" appears in no
-/// entry. The model understands the question and turns it into terms that do
-/// appear — in testing it searched "anxious", got one hit, and then expanded to
-/// "grant application" on its own.
+/// This closes the gap the evaluation exposed: `Ranker` can't handle "nervous
+/// about the future" because "nervous" appears in no entry, but the model
+/// rewrites it into terms that do.
 struct SearchJournalTool: Tool {
 
     let name = "searchJournal"
@@ -50,12 +46,11 @@ struct SearchJournalTool: Tool {
     private let retrieval: RetrievalService
     private let audit: ToolAudit
 
-    /// How many entries to return. Measured: full entry text costs ~58 tokens
-    /// per hit against a 4096-token window, so five hits is ~7% of context.
+    /// Full entry text costs ~58 tokens per hit against a 4096-token window,
+    /// so five hits is ~7% of context.
     private static let hitLimit = 5
 
-    /// Per-entry character cap. Entries average ~170 characters today, but one
-    /// long entry could otherwise consume the whole budget.
+    /// Per-entry cap, so one long entry can't consume the whole budget.
     private static let textLimit = 600
 
     init(store: JournalStore, retrieval: RetrievalService, audit: ToolAudit) {
@@ -64,10 +59,9 @@ struct SearchJournalTool: Tool {
         self.audit = audit
     }
 
-    /// `Tool.call` is `@concurrent`, and `JournalEntry` is a SwiftData model —
-    /// not `Sendable`, so it must not cross the hop. All entry access happens in
-    /// `search(_:)` on the main actor and only the rendered `String` escapes:
-    /// the architecture boundary enforced by the compiler rather than a comment.
+    /// `Tool.call` is `@concurrent` and `JournalEntry` isn't `Sendable`, so
+    /// entries can't cross the hop. Access happens in `search(_:)` on the main
+    /// actor and only the rendered `String` escapes.
     func call(arguments: Arguments) async throws -> String {
         await search(arguments)
     }
@@ -91,12 +85,9 @@ struct SearchJournalTool: Tool {
         return payload
     }
 
-    /// What to say when nothing matched.
-    ///
-    /// A bare "No matching entries" sent the model into a retry loop, mutating
-    /// its own query into "follow-up-up-up" across four calls before the request
-    /// failed outright. Naming what the journal *does* contain gives it
-    /// something to correct toward, or grounds to stop.
+    /// A bare "no matching entries" sent the model into a retry loop, mutating
+    /// its query across four calls. Naming what the journal does contain gives
+    /// it something to correct toward, or grounds to stop.
     @MainActor
     private static func noMatches(in entries: [JournalEntry]) -> String {
         let topics = Set(entries.flatMap { $0.insight?.topics ?? [] })
@@ -118,12 +109,10 @@ struct SearchJournalTool: Tool {
         return start...Date.now
     }
 
-    /// Renders one hit.
+    /// Renders one hit with full entry text rather than the model's summary.
     ///
-    /// Full entry text, not the model's own summary. Reasoning over its earlier
-    /// paraphrase would compound extraction mistakes and make them unfalsifiable
-    /// — it mislabelled a company as a person once already. Raw text lets it
-    /// correct that, and the measured cost is 12 tokens per hit over the summary.
+    /// Reasoning over its own paraphrase would compound extraction mistakes.
+    /// Measured cost is 12 tokens per hit over the summary.
     @MainActor
     private static func render(_ result: RetrievalService.Result) -> String {
         let entry = result.entry
@@ -147,11 +136,10 @@ struct SearchJournalTool: Tool {
     }
 }
 
-/// Stable short ids the model can cite and the UI can resolve back to entries.
+/// Short ids the model can cite and the UI can resolve.
 ///
-/// `PersistentIdentifier` stringifies to something long and opaque, which would
-/// waste tokens and invite the model to mangle it. A short ordinal is cheap to
-/// emit and cheap to resolve.
+/// `PersistentIdentifier` stringifies to something long and opaque, wasting
+/// tokens and inviting the model to mangle it.
 @MainActor
 enum Citation {
     private static var forward: [PersistentIdentifier: Int] = [:]

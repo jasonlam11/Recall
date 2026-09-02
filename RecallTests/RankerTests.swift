@@ -3,8 +3,8 @@ import Testing
 
 /// Ranking evaluation against a labeled corpus.
 ///
-/// This is a test, not a report, on purpose. The ranking bug that shipped —
-/// weighting the vector signal at 0.5 after measuring it as unreliable — was
+/// This is a test, not a report. The ranking bug that shipped,
+/// weighting the vector signal at 0.5 after measuring it as unreliable, was
 /// documented in NOTES.md and contradicted by the code, because nothing checked
 /// that the weights followed the measurements. These assertions are that check.
 struct RankerTests {

@@ -34,7 +34,7 @@ extension EntryInsight {
     /// Removes values that describe the absence of a value.
     ///
     /// Asked for people in an entry mentioning none, the model returned
-    /// `["no people"]` — and the UI dutifully rendered a chip reading "no
+    /// `["no people"]`, and the UI dutifully rendered a chip reading "no
     /// people". The instructions now forbid it, but instructions are a request
     /// the model may decline, so this is the guarantee.
     ///

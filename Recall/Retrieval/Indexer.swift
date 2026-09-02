@@ -19,7 +19,7 @@ final class Indexer {
     /// The text actually embedded for an entry.
     ///
     /// Includes the model's summary and topics alongside the raw text, because
-    /// enrichment has already distilled the entry — throwing that away and
+    /// enrichment has already distilled the entry. Throwing that away and
     /// embedding only raw prose would discard work the model already did.
     private func indexText(for entry: JournalEntry) -> String {
         var parts = [entry.text]

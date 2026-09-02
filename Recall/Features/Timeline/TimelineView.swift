@@ -14,7 +14,7 @@ struct TimelineView: View {
     /// Entries grouped by day, newest first.
     ///
     /// A flat list of equally weighted rows is a table. Days give the timeline
-    /// the shape a journal actually has, and make gaps visible — which is
+    /// the shape a journal actually has, and make gaps visible, which is
     /// itself information about how you've been writing.
     private var days: [(date: Date, entries: [JournalEntry])] {
         let calendar = Calendar.current

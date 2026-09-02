@@ -100,7 +100,7 @@ struct AskView: View {
         }
     }
 
-    /// Citations are controls, not decoration — the point of citing is that the
+    /// Citations are controls, not decoration. The point of citing is that the
     /// reader can check the model's work.
     @ViewBuilder
     private func citations(_ ids: [Int]) -> some View {
@@ -119,7 +119,7 @@ struct AskView: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel("Open source entry: \(entry.insight?.title ?? "Untitled")")
                     } else {
-                        // The model cited an id that doesn't resolve — shown
+                        // The model cited an id that doesn't resolve. Shown
                         // rather than hidden, since it means it invented one.
                         Chip(text: "unknown entry", symbol: "questionmark.circle")
                     }

@@ -4,10 +4,8 @@ import Observation
 
 /// A multi-turn conversation about the journal.
 ///
-/// Unlike enrichment — which uses a fresh session per entry because it's
-/// stateless — Ask mode keeps one session for the whole conversation. History is
-/// the point here: "what about last month?" only means something relative to
-/// the previous turn.
+/// Keeps one session for the whole conversation, unlike enrichment, which is
+/// stateless. History is the point: "what about last month?" needs it.
 @MainActor
 @Observable
 final class AskConversation {
@@ -17,8 +15,8 @@ final class AskConversation {
         let id = UUID()
         let role: Role
         var text: String
-        /// Entries the tools actually surfaced for this turn — recorded by the
-        /// retrieval layer, not claimed by the model.
+        /// Entries the tools surfaced, recorded by the retrieval layer rather
+        /// than claimed by the model.
         var citations: [Int] = []
     }
 
@@ -26,9 +24,8 @@ final class AskConversation {
     private(set) var isResponding = false
     private(set) var errorMessage: String?
 
-    /// Recreated by `reset()`. The transcript lives inside the session, so
-    /// clearing `messages` without replacing this leaves the model holding the
-    /// entire previous conversation.
+    /// Recreated by `reset()`. The transcript lives in the session, so
+    /// clearing `messages` alone leaves the model holding the old conversation.
     @ObservationIgnored private var session: LanguageModelSession
 
     /// Kept so a fresh session can be built with the same tools.
@@ -37,12 +34,12 @@ final class AskConversation {
     private let audit: ToolAudit
     let budget = ContextBudget()
 
-    /// Rules for the model. These live in `instructions` — the protected channel
-    /// — because journal text arriving through tool output is untrusted data and
-    /// must not be able to redirect behavior.
+    /// Rules for the model, in `instructions` rather than the prompt: journal
+    /// text arriving via tool output is untrusted and must not redirect
+    /// behaviour.
     ///
-    /// Note what is *not* here: any request to cite sources. Asking produced no
-    /// citations at all. Provenance is recorded by `ToolAudit` instead.
+    /// Deliberately contains no request to cite sources. Asking produced none;
+    /// `ToolAudit` records provenance instead.
     private static let instructions = """
         You answer questions about the user's own private journal.
 
@@ -87,10 +84,9 @@ final class AskConversation {
             try await respond(to: trimmed, into: index)
         } catch let error as LanguageModelSession.GenerationError {
             if Self.isTransient(error) {
-                // Measured: the same question against the same corpus fails
-                // roughly a third of the time with an internal token
-                // generation error, and succeeds on retry. Not our input — the
-                // failure moves between questions run to run.
+                // The same question fails roughly a third of the time with an
+                // internal generation error and succeeds on retry. The failure
+                // moves between questions, so it isn't the input.
                 messages[index].text = ""
                 do {
                     try await respond(to: trimmed, into: index)
@@ -110,11 +106,10 @@ final class AskConversation {
     }
 
     /// Prose, unconstrained. Generating the answer as a `@Generable` struct
-    /// alongside tools failed to decode, and when it did succeed the prose was
-    /// markedly worse — guided generation is for extraction, not narration.
+    /// broke decoding alongside tools and made the prose worse. Guided
+    /// generation is for extraction, not narration.
     ///
-    /// Snapshots of a string response are cumulative, so each replaces rather
-    /// than appends.
+    /// String snapshots are cumulative, so each replaces rather than appends.
     private func respond(to question: String, into index: Int) async throws {
         for try await snapshot in session.streamResponse(to: question) {
             messages[index].text = snapshot.content
@@ -127,9 +122,8 @@ final class AskConversation {
         )
     }
 
-    /// Failures worth retrying: an internal generation fault, as opposed to a
-    /// guardrail decision or a full context window, which will fail identically
-    /// the second time.
+    /// Worth retrying only for internal faults. A guardrail decision or a full
+    /// context window fails identically the second time.
     private static func isTransient(_ error: LanguageModelSession.GenerationError) -> Bool {
         switch error {
         case .guardrailViolation, .exceededContextWindowSize,
@@ -140,17 +134,14 @@ final class AskConversation {
         }
     }
 
-    /// Starts over.
+    /// Starts over, including a new session.
     ///
-    /// **Builds a new session.** The transcript belongs to the session, not to
-    /// `messages`, so an earlier version of this cleared the visible history and
-    /// the budget counters while the model still held every previous turn. The
-    /// bar read 0% against a window that was genuinely 90% full, and the model
-    /// could still answer from a conversation the user believed was gone — the
-    /// second being the worse of the two.
+    /// The transcript belongs to the session, not to `messages`. An earlier
+    /// version cleared the visible history and the counters while the model
+    /// still held every turn, so the bar read 0% against a nearly full window
+    /// and the model could answer from a conversation the user thought was gone.
     ///
-    /// There's no API to trim a transcript in place, so the whole session is
-    /// replaced. That is the discard this method has always claimed to do.
+    /// There's no API to trim a transcript in place, so it's replaced.
     func reset() {
         session = LanguageModelSession(tools: tools) { Self.instructions }
         messages = []

@@ -69,7 +69,7 @@ struct CaptureView: View {
                 .background(.clear)
                 .focused($isWriting)
                 // Capped, because a TextEditor inside a ScrollView expands to
-                // fill whatever it's offered — which left ~450pt of dead space
+                // fill whatever it's offered, which left ~450pt of dead space
                 // between the placeholder and the Save button.
                 .frame(minHeight: 160, maxHeight: 300)
                 .accessibilityLabel("Journal entry")

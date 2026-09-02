@@ -1,13 +1,12 @@
 import Foundation
 
-/// Vector math for retrieval. Free functions on plain arrays — no state, no
-/// framework dependency, trivially unit-testable.
+/// Vector maths for retrieval. Pure functions, no state.
 nonisolated enum Vector {
 
-    /// Cosine similarity: the angle between two vectors, ignoring magnitude.
+    /// Angle between two vectors, ignoring magnitude.
     ///
-    /// Magnitude is noise here — it tracks text length more than meaning — so
-    /// angle is the right comparison, not Euclidean distance.
+    /// Cosine rather than Euclidean distance because magnitude tracks text
+    /// length, not meaning.
     static func cosineSimilarity(_ a: [Float], _ b: [Float]) -> Float {
         guard a.count == b.count, !a.isEmpty else { return 0 }
         var dot: Float = 0, normA: Float = 0, normB: Float = 0
@@ -33,12 +32,10 @@ nonisolated enum Vector {
         return sum.map { $0 / Float(counted) }
     }
 
-    /// Subtracts the corpus centroid from a vector.
+    /// Subtracts the corpus centroid.
     ///
-    /// Mean-pooled transformer embeddings are anisotropic: they cluster in a
-    /// narrow cone, so raw cosine scores bunch up near 1.0 and small real
-    /// differences get lost in the noise. Removing the common component
-    /// widened the score range ~4.5x in measurement (0.06 to 0.27).
+    /// Mean-pooled embeddings cluster in a narrow cone, so raw scores bunch near
+    /// 1.0. Removing the shared component widened the measured spread ~4.5x.
     static func centered(_ v: [Float], centroid: [Float]) -> [Float] {
         guard v.count == centroid.count, !centroid.isEmpty else { return v }
         return zip(v, centroid).map(-)

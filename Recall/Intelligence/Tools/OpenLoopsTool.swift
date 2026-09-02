@@ -6,7 +6,7 @@ import SwiftData
 ///
 /// This exists because searching for them doesn't work, and can't. Asked "what
 /// did I say I'd follow up on?", the model reasonably searched for "follow up"
-/// — but the words in the `openLoops` field are things like "official offer
+/// but the words in the `openLoops` field are things like "official offer
 /// from Kestrel", never the phrase "follow up". No amount of term matching
 /// bridges that.
 ///
@@ -34,7 +34,7 @@ struct OpenLoopsTool: Tool {
 
     /// Most recent entries to report.
     ///
-    /// Unbounded, this returned every entry with an open loop — fine for a
+    /// Unbounded, this returned every entry with an open loop. Fine for a
     /// twelve-entry journal, and thousands of tokens against a 4096-token
     /// window once someone has written for a year. `SearchJournalTool` was
     /// capped from the start; this wasn't, because a projection felt like it

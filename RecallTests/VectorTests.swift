@@ -80,7 +80,7 @@ struct VectorTests {
 
     @Test("Centering widens the spread of clustered vectors")
     func centeringWidensSpread() {
-        // Three vectors sharing a large common component — the anisotropy that
+        // Three vectors sharing a large common component, the anisotropy that
         // made raw cosine scores bunch near 1.0 in the measured corpus.
         let a: [Float] = [10, 10, 1]
         let b: [Float] = [10, 10, 2]

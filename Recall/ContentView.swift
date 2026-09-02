@@ -28,7 +28,7 @@ struct ContentView: View {
     }
 
     /// The two things you can do, as visible controls rather than toolbar
-    /// items. The toolbar versions were there and unfindable — the same problem
+    /// items. The toolbar versions were there and unfindable, the same problem
     /// `.searchable` had in this sidebar. A control the user can't locate is
     /// a feature that doesn't exist.
     @ViewBuilder

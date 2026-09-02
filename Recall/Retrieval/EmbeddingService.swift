@@ -4,8 +4,8 @@ import NaturalLanguage
 /// Turns text into a vector using Apple's on-device contextual embedding model.
 ///
 /// An `actor` because `NLContextualEmbedding` is a loaded model with mutable
-/// internal state — serializing access keeps it off the main thread and out of
-/// data-race territory without a lock.
+/// internal state. Serialising access keeps it off the main thread without a
+/// lock.
 actor EmbeddingService {
 
     private var embedding: NLContextualEmbedding?
@@ -31,7 +31,7 @@ actor EmbeddingService {
     ///
     /// The model emits a vector per token; a single vector per entry is what
     /// makes cheap comparison possible. Mean pooling is the standard reduction
-    /// and its weaknesses are documented in NOTES.md — it is treated here as one
+    /// and its weaknesses are documented in NOTES.md. It is treated here as one
     /// retrieval signal, not as the ranker.
     func vector(for text: String) throws -> [Float] {
         try prepare()

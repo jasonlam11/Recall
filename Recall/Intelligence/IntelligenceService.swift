@@ -6,8 +6,8 @@ import FoundationModels
 /// The seam sits here rather than around the model itself: in this SDK
 /// `LanguageModelSession` only accepts a concrete `SystemLanguageModel`, so
 /// there is nothing to inject at that level. Abstracting the *service* gets the
-/// same benefits — a fake for tests, and room for a Private Cloud Compute
-/// implementation on macOS 27 — without pretending the SDK is more polymorphic
+/// same benefits, a fake for tests and room for a Private Cloud Compute
+/// implementation on macOS 27, without pretending the SDK is more polymorphic
 /// than it is.
 nonisolated protocol IntelligenceService: Sendable {
     var availability: ModelAvailability { get }
@@ -110,7 +110,7 @@ nonisolated final class OnDeviceIntelligenceService: IntelligenceService {
                         to: "Analyze the journal entry below.\n\n---\n\(entryText)\n---",
                         generating: EntryInsight.self
                     )
-                    // Each element is a Snapshot wrapping the partial value —
+                    // Each element is a Snapshot wrapping the partial value.
                     // the WWDC25 talk yielded the partial directly; the shipping
                     // SDK wraps it.
                     for try await snapshot in stream {

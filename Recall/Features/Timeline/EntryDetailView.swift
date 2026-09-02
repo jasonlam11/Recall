@@ -3,7 +3,7 @@ import SwiftUI
 /// Full view of a single entry: what was written, and what the model made of it.
 ///
 /// The writing is primary and set in serif; derived metadata sits below a rule
-/// in interface type. The distinction is the point — the writer's words are the
+/// in interface type. The distinction is the point: the writer's words are the
 /// record, the model's reading is commentary.
 struct EntryDetailView: View {
     let entry: JournalEntry

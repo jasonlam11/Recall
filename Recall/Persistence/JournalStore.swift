@@ -89,7 +89,7 @@ final class JournalStore {
         )
     }
 
-    /// Entries that still need an embedding — the backlog the indexer works through.
+    /// Entries that still need an embedding: the indexer's backlog.
     func unindexedEntries() throws -> [JournalEntry] {
         try allEntries().filter { !$0.isIndexed }
     }
