@@ -745,3 +745,56 @@ shares a term with its targets, and the vector doesn't bridge it. That gap is no
 fixable at the retrieval layer — it's what Ask mode's query expansion is for, and
 in testing the model did exactly that, turning "anxious" into "job search"
 unprompted. Retrieval indexes; the model supplies the semantics.
+
+---
+
+## 2026-09-01 — Benchmarks, and a correction to my own numbers
+
+`Benchmark/` measures the on-device model against the real `EntryInsight` schema.
+Cold start is measured in *fresh processes*, because the model stays warm for the
+life of a process — timing it twice in one run would only ever show "warm".
+
+```
+context window     4096 tokens
+instructions         87 tokens
+one entry            59 tokens
+
+cold  first-snapshot 1459ms / 655ms / 629ms   total 3226ms / 2079ms / 1937ms
+warm  first-snapshot  666ms / 630ms / 627ms   total 2102ms / 2154ms / 2515ms
+
+enrichment (steady state, n=5)   min 1773ms   p50 1932ms   max 2040ms
+embedding one entry (n=45)       min   10ms   p50   10ms   max   21ms
+```
+
+### Correction: enrichment is ~2s, not ~6s
+
+An earlier note in this file recorded "~5.9s before the first snapshot, ~90% of
+latency is prefill" and reasoned from it. That measurement was the *first ever*
+Foundation Models call on this machine — one-time OS-level model loading, not
+steady state. Steady state is p50 **1.9s** total and **~630ms** to first
+snapshot.
+
+The mistake was generalizing from a single unrepeated sample. The fix was
+measuring across fresh processes.
+
+### `prewarm()` deleted
+
+The same note flagged that prewarm's benefit was unverified. Measured: cold
+first-snapshot 655/629ms, prewarmed 666/630/627ms. **No effect.** The only slow
+run was the first after boot, which is OS asset loading and happens regardless.
+
+So it's removed — the API exists and does something real in some contexts, but
+not measurably here, and code that exists on the strength of a WWDC mention
+rather than a measurement is cargo cult. Deleting it also removes the session
+churn it caused.
+
+### What the numbers actually say about the design
+
+Embedding is **10ms** and enrichment is **1900ms** — 190x apart. That justifies
+the split: entries are embedded inline on save (imperceptible) while enrichment
+streams in afterwards. It also means re-indexing after enrichment is free, so
+there was never a reason to skip it.
+
+The 87-token instructions and 59-token entry against a 4096-token window confirm
+the tool-payload budgeting: five full-text hits at ~58 tokens each is ~7% of
+context.

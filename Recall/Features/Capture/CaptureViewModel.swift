@@ -29,11 +29,6 @@ final class CaptureViewModel {
     var canSave: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isEnriching }
     var availability: ModelAvailability { intelligence.availability }
 
-    /// Called as the writer types, so the model is warm by the time they save.
-    func prewarmIfNeeded() {
-        (intelligence as? OnDeviceIntelligenceService)?.prewarm()
-    }
-
     func save() async {
         let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !body.isEmpty else { return }
