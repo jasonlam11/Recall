@@ -200,7 +200,7 @@ open Recall.xcodeproj    # select the "My Mac" scheme, then ⌘R
 ```
 
 ```bash
-xcodebuild -scheme Recall -destination 'platform=macOS' test   # 35 tests
+xcodebuild -scheme Recall -destination 'platform=macOS' test   # 41 tests
 ./Evaluation/run.sh                                            # retrieval metrics
 ./Benchmark/run.sh                                             # latency
 ```

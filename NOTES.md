@@ -538,9 +538,27 @@ as "about N exchanges left" rather than a precise count. Showing a false precisi
 would be worse than showing an approximation.
 
 **Cost per turn is measured, not assumed.** `exchangesRemaining` divides the
-remaining budget by *this conversation's* average turn cost. A question answered
-from one entry costs a fraction of one answered from five, so a constant guessed
-in advance would be wrong in both directions.
+remaining budget by what recent turns actually cost. A question answered from one
+entry costs a fraction of one answered from five, so a constant guessed in
+advance would be wrong in both directions.
+
+**Two bugs in the first version of that estimate**, both found by explaining it
+rather than by using it:
+
+1. **The instructions were charged to every turn.** `perTurn = used / turns`
+   divided everything by the turn count, including the ~87 tokens spent once at
+   session start. That inflated per-turn cost by the full 87 at turn one and by
+   ~17 by turn five, so the estimate was pessimistic by roughly one exchange
+   early and quietly grew more accurate. It erred safe, which is why it looked
+   fine.
+2. **Averaging the whole conversation let the estimate rise.** Usage only ever
+   increases, but one cheap turn could pull the average down enough that
+   "exchanges left" went *up*. Now a trailing window of the last three turns.
+
+**Extracted the arithmetic as a pure static function** so it can be tested
+without a loaded model — same reasoning that pulled `Ranker` out of
+`RetrievalService`. Six tests cover the window behaviour, rounding direction,
+and division by a zero-cost turn.
 
 Uses `contextSize` and `tokenCount`, the iOS 26.4 additions from WWDC26 session
 241 — with a character-count fallback if the count throws, so the indicator never

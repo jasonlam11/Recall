@@ -22,20 +22,54 @@ final class ContextBudget {
     private(set) var used = 0
     private(set) var turns = 0
 
+    /// Counted once at the start of a conversation, so it must not be charged
+    /// to every turn when averaging.
+    private var instructionCost = 0
+
+    /// Cost of each completed turn, most recent last.
+    private var turnCosts: [Int] = []
+
     /// Held back so the model always has room to answer.
     private static let reserve = 500
+
+    /// How many recent turns the estimate averages over.
+    ///
+    /// Averaging the whole conversation lets one cheap turn raise the estimate,
+    /// so "exchanges left" can go *up* while usage only ever goes up too. A
+    /// short trailing window tracks what turns actually cost now.
+    private static let window = 3
+
+    /// Used before any turn has completed: instructions, a short question,
+    /// five retrieved entries, and a brief answer.
+    private static let firstTurnGuess = 450
 
     var total: Int { model.contextSize }
     var remaining: Int { max(0, total - used - Self.reserve) }
     var fraction: Double { total > 0 ? Double(used) / Double(total) : 0 }
 
-    /// Rough number of further exchanges, from this conversation's own average.
+    /// Rough number of further exchanges, from what recent turns actually cost.
     ///
-    /// Turn cost varies with how much the tools returned, so an average measured
-    /// here beats a constant guessed in advance.
+    /// Measured rather than assumed: a question answered from one entry costs a
+    /// fraction of one answered from five, so a constant would be wrong in both
+    /// directions.
+    ///
+    /// Excludes `instructionCost`, which is spent once. Dividing it by the turn
+    /// count charged a fixed cost as if it recurred, which made the estimate
+    /// pessimistic by roughly one exchange early in a conversation and quietly
+    /// more accurate later.
     var exchangesRemaining: Int {
-        guard turns > 0, used > 0 else { return max(1, remaining / 450) }
-        let perTurn = max(1, used / turns)
+        Self.exchanges(remaining: remaining, turnCosts: turnCosts)
+    }
+
+    /// The estimate as a pure function, so it can be tested without a model.
+    ///
+    /// Same reason `Ranker` was extracted from `RetrievalService`: the
+    /// arithmetic is the part likely to be wrong, and it shouldn't need a
+    /// loaded language model to exercise.
+    static func exchanges(remaining: Int, turnCosts: [Int]) -> Int {
+        let recent = turnCosts.suffix(window)
+        guard !recent.isEmpty else { return max(1, remaining / firstTurnGuess) }
+        let perTurn = max(1, recent.reduce(0, +) / recent.count)
         return remaining / perTurn
     }
 
@@ -44,6 +78,8 @@ final class ContextBudget {
     func reset() {
         used = 0
         turns = 0
+        instructionCost = 0
+        turnCosts = []
     }
 
     /// Adds one completed exchange.
@@ -53,12 +89,16 @@ final class ContextBudget {
             turnTokens += (try? await model.tokenCount(for: text)) ?? Self.estimate(text)
         }
         used += turnTokens
+        turnCosts.append(turnTokens)
         turns += 1
     }
 
     /// Counts the instructions once, at the start of a conversation.
     func recordInstructions(_ instructions: String) async {
-        used += (try? await model.tokenCount(for: Instructions(instructions))) ?? Self.estimate(instructions)
+        let cost = (try? await model.tokenCount(for: Instructions(instructions)))
+            ?? Self.estimate(instructions)
+        instructionCost = cost
+        used += cost
     }
 
     /// Fallback when the framework can't count: English averages ~4 characters
