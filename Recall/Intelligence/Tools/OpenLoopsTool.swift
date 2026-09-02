@@ -7,7 +7,7 @@ import SwiftData
 /// This exists because searching for them doesn't work, and can't. Asked "what
 /// did I say I'd follow up on?", the model reasonably searched for "follow up"
 /// — but the words in the `openLoops` field are things like "official offer
-/// from Wayfair", never the phrase "follow up". No amount of term matching
+/// from Kestrel", never the phrase "follow up". No amount of term matching
 /// bridges that.
 ///
 /// The field is already structured, so the answer is a lookup rather than a

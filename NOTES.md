@@ -15,8 +15,8 @@ target, building on the shipping macOS 26.5 SDK (Xcode 26.6).
 - *iOS first.* Rejected: requires an Apple Intelligence–capable device or a ~7 GB
   simulator runtime, and adds a hardware dependency to every test cycle.
 - *macOS 27 / Xcode 27 beta.* Rejected for v1. Would unlock `PrivateCloudComputeLanguageModel`,
-  `DynamicProfile`, and vision attachments, but means a beta OS on my only machine
-  while I'm applying for internships. Not a trade worth making.
+  `DynamicProfile`, and vision attachments, but means a beta OS on my only
+  machine. Not a trade worth making.
 
 **Why.** I verified the on-device model is available and responding on this Mac, so
 the macOS target has zero external dependencies. Everything v1 needs — guided
@@ -54,8 +54,8 @@ The API moved after the talk. Copying the video's code does not compile.
 Confirmed with a throwaway CLI before writing any app code:
 availability check → plain `respond` → `@Generable` struct with `@Guide` constraints.
 
-The model correctly extracted a person ("Priya") separately from topics
-("partition key", "debugging"), respected `.maximumCount(5)` on both arrays, and
+The model correctly extracted a person ("Nadia") separately from topics
+("index column", "debugging"), respected `.maximumCount(5)` on both arrays, and
 rewrote first-person input into second-person output because the `@Guide` asked
 for it. Two calls including cold start: ~4.7s.
 
@@ -365,29 +365,29 @@ down; worth filing feedback if the sidebar placement genuinely doesn't render.
 
 ## 2026-09-01 — Ranking was wrong, diagnosed from one real search
 
-Searched "wayfair" over 9 entries. The entry explicitly about waiting for a
-Wayfair offer ranked **6th**. Above it: gaming achievements, fraternity plans,
-Roblox habits — all matched on "similar in meaning" alone.
+Searched "kestrel" over 9 entries. The entry explicitly about waiting for a
+Kestrel offer ranked **6th**. Above it: chess, climbing club,
+and reading habits — all matched on "similar in meaning" alone.
 
 **Three separate bugs.**
 
 1. **The entry text was never searched.** `overlap()` compared query tokens
    against `insight.topics` and `insight.people` only. A literal word in the
    writer's own prose contributed *nothing* to the score. The one reason
-   "wayfair" matched at all was a mis-tagged person field.
+   "kestrel" matched at all was a mis-tagged person field.
 
 2. **The weakest signal had the highest weight.** I measured the vector as
    unreliable and then weighted it 0.5 — more than everything else combined.
    An exact-term match was worth 0.15. The measurement was right there in this
    file and the weights contradicted it.
 
-3. **"Wayfair" was extracted as a person.** It's a company.
+3. **"Kestrel" was extracted as a person.** It's a company.
 
 **Fixes.**
 
 - **`LexicalIndex`**: IDF-weighted term matching over the writer's own words plus
   the model's title/summary/topics/people. A term's evidential value depends on
-  its rarity — "wayfair" in 1 of 9 entries is strong evidence; "work" in 6 of 9
+  its rarity — "kestrel" in 1 of 9 entries is strong evidence; "work" in 6 of 9
   is nearly none. Scores are normalized by the query's total IDF, so matching one
   rare term beats matching two common ones.
 - **Reweighted**: lexical 0.6, topic 0.2, person 0.1, mood 0.05, vector 0.15.
@@ -411,7 +411,7 @@ for the evaluation harness being a test, not a report.
 
 ## 2026-09-01 — A test that was wrong, not code that was wrong
 
-`rarityBeatsFrequency` compared `score("wayfair", doc0)` against
+`rarityBeatsFrequency` compared `score("kestrel", doc0)` against
 `score("work", doc1)` and expected the first to be larger. Both are 1.0: scores
 are normalized by the query's total IDF, so a single-term query that matches
 scores 1.0 by construction.
@@ -419,7 +419,7 @@ scores 1.0 by construction.
 That normalization is deliberate — it makes ranking within one query meaningful
 and comparison across different queries meaningless. The test asserted a property
 the design doesn't have. Replaced with one that tests within-query behavior: for
-"wayfair work", the rare half is worth more than the common half, and the two
+"kestrel work", the rare half is worth more than the common half, and the two
 sum to 1.0.
 
 Worth remembering: a failing test is a hypothesis about the code, not a verdict.
@@ -459,7 +459,7 @@ Results by query, before and after two fixes:
 
 | query | before | after |
 |---|---|---|
-| "wayfair" | 6th (behind gaming, fraternity) | 1st and 2nd, both correct |
+| "kestrel" | 6th (behind chess, climbing club) | 1st and 2nd, both correct |
 | "gaming" | mixed | correct, top 2 |
 | "gym" | mixed | correct, top 3 |
 | "nervous about the future" | 5 results, ranked partly on "the" | 1 result, correct |
@@ -550,7 +550,7 @@ or a fatal signal like SIGSEGV/SIGABRT, and the paused frame is in your code.
 
 Tool calling works and query understanding is the real win. For "Why have I been
 anxious lately?" the model searched `terms: ["anxious"]`, got one hit, then
-expanded to `["job search"]` on its own. That synonym expansion is exactly what
+expanded to `["grant application"]` on its own. That synonym expansion is exactly what
 `Ranker` cannot do and why the natural-language gap needed the model, not better
 term matching.
 
@@ -584,7 +584,7 @@ layer already knows the answer.**
 ### Two tools, because some questions aren't searches
 
 "What did I say I'd follow up on?" made the model search for "follow up" — and
-the words in `openLoops` are things like "official offer from Wayfair", never
+the words in `openLoops` are things like "official offer from Kestrel", never
 the phrase "follow up". No term matching bridges that gap.
 
 `OpenLoopsTool` is a projection, not a search: it reads the structured field
@@ -621,9 +621,9 @@ no field at all.
   the model calls the tool and accepts what comes back rather than reranking. A
   real test needs a labeled question set with expected entries — the Week 3
   harness.
-- Answer quality varies. "You've been doing leetcoding, specifically the Neetcode
-  150" is good; "You've been to the gym three times in the past few days. Here
-  are the entries that mention the gym:" trails off mid-thought.
+- Answer quality varies. "You've been drilling Dutch flashcards, specifically
+  separable verbs" is good; "You've been to the pool three times in the past few
+  days. Here are the entries that mention the pool:" trails off mid-thought.
 - The 4096-token window bounds conversation length. Currently handled by letting
   it fail and offering "New Conversation", which is honest but crude. Real
   transcript management is unbuilt.
@@ -743,7 +743,7 @@ set, which is a real question mark over those two signals.
 "nervous about the future" and "feeling behind on everything" still miss. Neither
 shares a term with its targets, and the vector doesn't bridge it. That gap is not
 fixable at the retrieval layer — it's what Ask mode's query expansion is for, and
-in testing the model did exactly that, turning "anxious" into "job search"
+in testing the model did exactly that, turning "anxious" into "grant application"
 unprompted. Retrieval indexes; the model supplies the semantics.
 
 ---
@@ -952,7 +952,7 @@ Fixed in the instructions, and then guaranteed in code, because instructions are
 a request the model may decline. `EntryInsight.dropPlaceholders` matches exactly
 against a small set plus "no <field name>" — deliberately *not* any string
 starting with "no", because an entry can legitimately be about "no sleep" or "no
-response from Wayfair". Dropping those would be a worse bug than the one being
+response from Kestrel". Dropping those would be a worse bug than the one being
 fixed. Three tests cover both directions.
 
 **3. ~450pt of dead space in the composer.** A `TextEditor` inside a `ScrollView`
@@ -993,3 +993,82 @@ nobody can edit.
 Verified in the built bundle rather than by the build succeeding: `AppIcon.icns`
 is present in `Contents/Resources`, `CFBundleIconName` is set, and `assetutil`
 lists `AppIcon` in the compiled catalogue.
+
+---
+
+## 2026-09-02 — Sanitising the repo, and the bug it exposed
+
+Before making the repository public: the evaluation corpus and this log described
+my actual life. Real employer, real colleagues by name, real pending offer, real
+anxiety about it. None of that belongs in a public repo, and the names in
+particular belonged to people who never agreed to appear in one.
+
+The journal database itself was never tracked — it lives in the app container —
+so only fixtures and notes needed rewriting. `Evaluation/corpus.json` is now
+wholly fictional, and every personal detail in this file, the benchmarks, and the
+tests is replaced.
+
+### The numbers changed, and I am not tuning them back
+
+New corpus, honestly harder:
+
+```
+before (old corpus)   P@1 0.80   R@3 0.75   MRR 0.80   abstention 1.00   overall 0.838
+after  (fictional)    P@1 0.70   R@3 0.70   MRR 0.70   abstention 1.00   overall 0.775
+```
+
+"unfinished conversations" now shares no term with its targets, where the old
+phrasing happened to share "work". Adjusting the fixture to recover 0.838 would
+be tuning the test to the answer — the precise failure the harness exists to
+prevent. **0.775 is the number.**
+
+### Ablation changed more than the headline
+
+```
+all signals       overall 0.775   P@1 0.70
+no vector         overall 0.775   P@1 0.70    <- no difference
+no lexical        overall 0.688   P@1 0.60
+no topic/person   overall 0.775   P@1 0.70    <- no difference
+```
+
+On the old corpus the vector was worth 0.042. On this one it is worth **nothing**,
+and neither are the topic and person signals. Only lexical matching demonstrably
+earns its weight.
+
+That is a genuinely uncomfortable result and worth stating plainly rather than
+burying: three of five signals have no measured benefit. They stay for now
+because the vector is the only one that *could* help a query sharing no
+vocabulary with its target — but that has never been demonstrated, and "it might
+help in principle" is exactly the reasoning `prewarm()` died for. If a larger
+labelled set still shows nothing, they should go.
+
+### `NLTagger` dropped a proper noun
+
+Renaming the fixture surfaced a real bug. `tokenize("kestrel work")` returned
+`["work"]`: the tagger classified an unfamiliar proper noun as an **interjection**
+when followed by another word, and interjections were on the drop list. The same
+word alone tags as `OtherWord` and survives.
+
+```
+tokenize("kestrel")       -> ["kestrel"]
+tokenize("kestrel work")  -> ["work"]
+tokenize("kestrel offer") -> ["offer"]
+```
+
+**Searching for an unusual name could return nothing.** "Wayfair" happened to tag
+as a noun, so the bug was invisible for as long as the fixture used a word the
+tagger recognised.
+
+This is the second failure from the same property — the tagger is contextual, and
+queries are fragments where context is missing. First it kept a stopword; now it
+deleted a name. Grammatical filtering is removed; the fixed stopword list is the
+only filter. Metrics unchanged at 0.775, so the tagger was contributing nothing
+except the bug.
+
+The cost is that the list is English-only where the tagger generalised across
+languages. Worth it — a search engine that loses proper nouns is broken in a way
+generality doesn't compensate for.
+
+**A regression test now pins it**, and the lesson is about fixtures: a test
+corpus using only vocabulary the tools recognise cannot find the case where they
+don't. The fixture was doing less work than it appeared to.

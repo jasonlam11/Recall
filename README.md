@@ -80,7 +80,7 @@ rather than merely unlikely.
 optional mood, optional timeframe — *is* the parse step. Because tool calling is
 built on guided generation, there's no separate "structure the question" pass and
 no way to emit a malformed query. Asked "why have I been anxious lately?", the
-model searched `["anxious"]`, then expanded to `["job search"]` on its own.
+model searched `["anxious"]`, then expanded to `["grant application"]` on its own.
 
 **Token accounting.** `contextSize` and `tokenCount` are used to track what each
 exchange spends — question, answer, and tool output, which is usually the largest
@@ -90,7 +90,7 @@ fills.
 **Two tools, because not every question is a search.** `listOpenLoops` is a
 projection over structured data. Asked what he'd said he would follow up on, the
 model searched for "follow up" — but open loops say things like *"official offer
-from Wayfair"*, never that phrase. No term matching bridges that.
+from Kestrel"*, never that phrase. No term matching bridges that.
 
 ## What measurement changed
 
@@ -112,10 +112,17 @@ The unit tests missed it because their fixtures had no embeddings, so the vector
 silently contributed zero. A fixture that omits a field doesn't test the code that
 reads it.
 
-**`NLTagger` is context-dependent.** It correctly drops "about" from "nervous
-about the future" and keeps it in the fragment "the about have with", where
-there's no grammar left to parse — and queries are frequently fragments. Grammar
-filtering plus a stopword floor, because the elegant answer measurably failed.
+**`NLTagger` failed twice, in opposite directions.** Used to strip function
+words by grammatical class, it *kept* "about" in the fragment "the about have
+with" — no grammar left to parse — and it *dropped* "kestrel" from "kestrel
+work", tagging an unfamiliar proper noun as an interjection. Alone, the same word
+tags as `OtherWord` and survives.
+
+The second is much worse: it silently deletes the highest-value kind of query
+term. Both come from the same property — the tagger is contextual, and queries
+are short fragments where context is what's missing. Replaced with a fixed
+stopword list, which is less clever and cannot misclassify a name it has never
+seen.
 
 **Citations took four designs.** Asking for them in `instructions` produced none.
 Making the answer `@Generable` produced them, but broke decoding alongside tools
@@ -136,13 +143,19 @@ Retrieval evaluation — 12 entries, 12 labeled queries, run against the shippin
 
 | metric | value |
 |---|---|
-| Precision@1 | 0.80 |
-| Recall@3 | 0.75 |
-| MRR | 0.80 |
+| Precision@1 | 0.70 |
+| Recall@3 | 0.70 |
+| MRR | 0.70 |
 | Abstention (correctly returns nothing) | 1.00 |
-| Overall | 0.838 |
+| Overall | 0.775 |
 
-Ablation: removing the vector signal costs 0.042 overall and drops P@1 to 0.70.
+Ablation is the more interesting output. Removing the lexical signal costs 0.087
+overall and drops P@1 to 0.60. Removing the vector signal, or the topic and
+person signals, **changes nothing** — on this query set only lexical matching
+demonstrably earns its weight. The vector stays because it is the only signal
+that could ever help a query sharing no vocabulary with its target, but that
+benefit is not yet demonstrated and the honest reading is that it may not be
+carrying its cost.
 
 The weight sweep is reported honestly — 57 of 75 configurations tie at the top,
 so twelve queries can't discriminate between weightings. The harness validates
@@ -181,9 +194,12 @@ model failure.
 ## Known limitations
 
 - Paraphrase queries with no shared vocabulary still miss at the retrieval layer
-  ("nervous about the future"). Ask mode handles them, because the model expands
-  the query; search alone does not.
-- The evaluation set is too small to tune weights against.
+  — "nervous about the future", "feeling behind on everything", and "unfinished
+  conversations" all fail. Ask mode handles them, because the model expands the
+  query into terms that do appear; search alone does not.
+- The vector signal's contribution is unproven: ablating it changes no metric.
+- The evaluation set is too small to tune weights against — 57 of 75
+  configurations tie.
 - The 4096-token context window bounds conversation length. Ask mode shows the
   remaining budget so resetting is a choice rather than a recovery, but there is
   no transcript summarisation or trimming — a full conversation must be

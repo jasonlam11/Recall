@@ -1,9 +1,8 @@
 import Foundation
-import NaturalLanguage
 
 /// Term matching weighted by how rare each term is in the corpus.
 ///
-/// A query term's value as evidence depends on its rarity. "Wayfair" appearing
+/// A query term's value as evidence depends on its rarity. "Kestrel" appearing
 /// in one entry out of nine is strong evidence about that entry; "work"
 /// appearing in six of nine says almost nothing. Inverse document frequency is
 /// the standard way to express that, and it's the signal that was missing
@@ -72,60 +71,37 @@ nonisolated struct LexicalIndex {
 
     /// Content words only, lowercased.
     ///
-    /// Function words are removed by *grammatical class* using `NLTagger`
-    /// rather than by a hand-maintained stopword list. IDF alone was not
-    /// enough: "the" appears in 8 of 11 entries, not all 11, so it kept a
-    /// nonzero weight and the query "nervous about the future" ranked an
-    /// unrelated entry on the strength of "the" alone.
+    /// Function words come off a fixed list. An earlier version used `NLTagger`
+    /// to remove them by grammatical class, which failed twice in opposite
+    /// directions:
     ///
-    /// Dropping determiners, prepositions, conjunctions, pronouns, and
-    /// particles leaves the words that carry the query's meaning. Untagged
-    /// words are kept — an unrecognized word is more likely a name or jargon
-    /// than a function word, and those are exactly the high-value terms.
+    /// - It *kept* "about" in the fragment "the about have with", because there
+    ///   was no grammar left to parse, letting stopwords manufacture matches.
+    /// - It *dropped* "kestrel" from "kestrel work", tagging an unfamiliar
+    ///   proper noun as an interjection. Alone the same word tags as
+    ///   `OtherWord` and survives. That silently deleted the single most
+    ///   valuable kind of query term — a rare name.
+    ///
+    /// Both come from the same property: the tagger is contextual, and queries
+    /// are short fragments where context is exactly what's missing. A fixed
+    /// list is less clever and cannot misclassify a name it has never seen.
+    ///
+    /// The cost is that the list is English-only, where the tagger generalised
+    /// across languages. Worth it: a search engine that loses proper nouns is
+    /// broken in a way no amount of generality compensates for.
     static func tokenize(_ text: String) -> [String] {
-        guard !text.isEmpty else { return [] }
-
-        let tagger = NLTagger(tagSchemes: [.lexicalClass])
-        tagger.string = text
-
-        var terms: [String] = []
-        tagger.enumerateTags(
-            in: text.startIndex..<text.endIndex,
-            unit: .word,
-            scheme: .lexicalClass,
-            options: [.omitPunctuation, .omitWhitespace]
-        ) { tag, range in
-            let word = text[range].lowercased()
-            guard word.count >= 3, word.contains(where: { $0.isLetter || $0.isNumber }) else {
-                return true
-            }
-            if Self.stopwords.contains(String(word)) { return true }
-            if let tag, Self.functionWordClasses.contains(tag) { return true }
-            terms.append(String(word))
-            return true
-        }
-        return terms
+        text.lowercased()
+            .split { !$0.isLetter && !$0.isNumber }
+            .map(String.init)
+            .filter { $0.count >= 3 && !stopwords.contains($0) }
     }
 
-    /// Grammatical classes that carry structure rather than meaning.
-    private static let functionWordClasses: Set<NLTag> = [
-        .determiner, .preposition, .conjunction, .pronoun, .particle, .interjection
-    ]
-
-    /// A floor under the tagger.
+    /// English function words.
     ///
-    /// `NLTagger` is context-dependent, which is usually its strength and here
-    /// its weakness: it correctly drops "about" from "nervous about the future"
-    /// and *keeps* it in the fragment "the about have with", because there's no
-    /// grammar left to parse. Queries are frequently fragments.
-    ///
-    /// Frequency cutoffs don't cover it either — in a twelve-entry corpus a word
-    /// can be pure noise and still appear in only a third of entries.
-    ///
-    /// So: both. The tagger generalizes across languages and inflections; this
-    /// list guarantees the worst offenders never ground a result. Standard
-    /// practice in information retrieval, and the pragmatic answer over an
-    /// elegant one that measurably fails.
+    /// Frequency alone doesn't cover these: in a twelve-entry corpus a word can
+    /// be pure noise and still appear in only a third of entries, keeping a
+    /// nonzero IDF. Standard practice in information retrieval, and the
+    /// pragmatic answer over an elegant one that measurably failed.
     private static let stopwords: Set<String> = [
         "about", "after", "again", "against", "all", "also", "and", "any", "are",
         "because", "been", "before", "being", "both", "but", "can", "cannot",

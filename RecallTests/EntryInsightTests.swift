@@ -20,14 +20,14 @@ struct EntryInsightTests {
         // A journal entry can legitimately be about no sleep or no response.
         // Dropping these would be a worse bug than the one being fixed.
         #expect(EntryInsight.dropPlaceholders(["no sleep"], named: "topics") == ["no sleep"])
-        #expect(EntryInsight.dropPlaceholders(["no response from Wayfair"], named: "open loops")
-                == ["no response from Wayfair"])
-        #expect(EntryInsight.dropPlaceholders(["Priya", "Marcus"], named: "people") == ["Priya", "Marcus"])
+        #expect(EntryInsight.dropPlaceholders(["no response from Kestrel"], named: "open loops")
+                == ["no response from Kestrel"])
+        #expect(EntryInsight.dropPlaceholders(["Nadia", "Theo"], named: "people") == ["Nadia", "Theo"])
     }
 
     @Test("Mixed lists keep only the real values")
     func mixed() {
-        #expect(EntryInsight.dropPlaceholders(["Priya", "none", "Marcus"], named: "people")
-                == ["Priya", "Marcus"])
+        #expect(EntryInsight.dropPlaceholders(["Nadia", "none", "Theo"], named: "people")
+                == ["Nadia", "Theo"])
     }
 }

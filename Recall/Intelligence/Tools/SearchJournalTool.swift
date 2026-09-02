@@ -14,7 +14,7 @@ import SwiftData
 /// never handle "nervous about the future", because "nervous" appears in no
 /// entry. The model understands the question and turns it into terms that do
 /// appear — in testing it searched "anxious", got one hit, and then expanded to
-/// "job search" on its own.
+/// "grant application" on its own.
 struct SearchJournalTool: Tool {
 
     let name = "searchJournal"

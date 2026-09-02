@@ -13,26 +13,26 @@ struct RankerTests {
     /// words, one rare proper noun, and entries whose relevance to a query is
     /// carried by meaning rather than shared vocabulary.
     private let corpus: [Ranker.Candidate] = [
-        .init(id: "wayfair-offer",
-              text: "Still waiting to hear back from Wayfair about the offer. Checking email constantly.",
-              title: "Job Search Uncertainty",
-              summary: "You are waiting on an offer and feeling anxious about the silence.",
-              topics: ["job search", "internship"], people: [], mood: .anxious),
-        .init(id: "gaming",
-              text: "Hit a new personal best in Clash Royale tonight. Felt good.",
-              title: "Gaming Achievements",
-              summary: "You are proud of a gaming milestone.",
-              topics: ["gaming", "achievements"], people: [], mood: .content),
-        .init(id: "gym",
-              text: "Up early, went to the gym before class. Legs are wrecked.",
-              title: "Morning Routine",
+        .init(id: "kestrel-grant",
+              text: "Still nothing from the Kestrel committee. Refreshing my inbox constantly.",
+              title: "Waiting on Kestrel",
+              summary: "You are waiting on a decision and feeling anxious about the silence.",
+              topics: ["grant application", "funding"], people: [], mood: .anxious),
+        .init(id: "chess",
+              text: "Broke sixteen hundred rapid tonight. Felt good.",
+              title: "Chess Rating",
+              summary: "You are proud of a small milestone.",
+              topics: ["chess", "milestones"], people: [], mood: .content),
+        .init(id: "pool",
+              text: "Up early, swam a mile before class. Shoulders are wrecked.",
+              title: "Pool Before Class",
               summary: "You kept to your morning routine and trained hard.",
-              topics: ["gym", "routine"], people: [], mood: .energized),
+              topics: ["pool", "routine"], people: [], mood: .energized),
         .init(id: "friends",
-              text: "Played basketball with Megan and Andy, then we all got food after.",
-              title: "A Day of Activities",
-              summary: "You spent the day with friends playing basketball and eating.",
-              topics: ["basketball", "food"], people: ["Megan", "Andy"], mood: .content),
+              text: "Climbed with Ines and Rui, then we all got noodles after.",
+              title: "Bouldering With Ines and Rui",
+              summary: "You spent the evening with friends climbing and eating.",
+              topics: ["bouldering", "food"], people: ["Ines", "Rui"], mood: .content),
         .init(id: "burnout",
               text: "Third weekend in a row at the desk. I cannot make myself care about this.",
               title: "Running Out of Steam",
@@ -52,19 +52,19 @@ struct RankerTests {
     func rareProperNoun() {
         // The original failure: this entry ranked sixth, behind unrelated
         // entries matching on vector similarity alone.
-        #expect(topID("wayfair") == "wayfair-offer")
+        #expect(topID("kestrel") == "kestrel-grant")
     }
 
     @Test("Topic terms rank their entries first")
     func topicTerms() {
-        #expect(topID("gaming") == "gaming")
-        #expect(topID("gym") == "gym")
-        #expect(topID("basketball") == "friends")
+        #expect(topID("chess") == "chess")
+        #expect(topID("pool") == "pool")
+        #expect(topID("bouldering") == "friends")
     }
 
     @Test("A person's name ranks the entry mentioning them")
     func personName() {
-        #expect(topID("megan") == "friends")
+        #expect(topID("ines") == "friends")
     }
 
     // MARK: - Stopwords
@@ -87,7 +87,7 @@ struct RankerTests {
 
     @Test("A one-word query doesn't match the whole corpus")
     func scoreFloorApplies() {
-        let results = ranker.rank(query: "gym", candidates: corpus)
+        let results = ranker.rank(query: "pool", candidates: corpus)
         #expect(results.count < corpus.count)
     }
 
@@ -98,14 +98,14 @@ struct RankerTests {
 
     @Test("Every result explains why it matched")
     func resultsAreExplained() {
-        for result in ranker.rank(query: "gym", candidates: corpus) {
+        for result in ranker.rank(query: "pool", candidates: corpus) {
             #expect(!result.reasons.isEmpty)
         }
     }
 
     @Test("Results come back in descending score order")
     func ordering() {
-        let scores = ranker.rank(query: "work exhaustion gaming", candidates: corpus).map(\.score)
+        let scores = ranker.rank(query: "writing exhaustion chess", candidates: corpus).map(\.score)
         #expect(scores == scores.sorted(by: >))
     }
 
@@ -122,7 +122,7 @@ struct RankerTests {
 
     @Test("An exact term match beats a pure vector match")
     func exactBeatsVector() {
-        // The gym entry has the term; the burnout entry gets a perfect vector
+        // The pool entry has the term; the burnout entry gets a perfect vector
         // score handed to it. The term must still win.
         var candidates = corpus
         let queryVector: [Float] = [1, 0, 0]
@@ -132,8 +132,8 @@ struct RankerTests {
                   people: candidate.people, mood: candidate.mood,
                   embedding: candidate.id == "burnout" ? [1, 0, 0] : [0, 1, 0])
         }
-        let top = ranker.rank(query: "gym", candidates: candidates,
+        let top = ranker.rank(query: "pool", candidates: candidates,
                               queryEmbedding: queryVector).first
-        #expect(top?.candidate.id == "gym")
+        #expect(top?.candidate.id == "pool")
     }
 }

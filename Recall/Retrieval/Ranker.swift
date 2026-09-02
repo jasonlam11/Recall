@@ -171,7 +171,7 @@ nonisolated struct Ranker {
     }
 
     /// Case-insensitive substring overlap in either direction, so "work"
-    /// matches "work deadlines" and "priya" matches "Priya".
+    /// matches "work deadlines" and "nadia" matches "Nadia".
     private func overlap(_ needles: Set<String>, with haystack: [String]) -> [String] {
         haystack.filter { item in
             let lower = item.lowercased()

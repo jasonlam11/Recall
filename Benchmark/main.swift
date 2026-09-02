@@ -3,10 +3,10 @@ import FoundationModels
 import NaturalLanguage
 
 let entryText = """
-Long day. Finally got the aggregation table working after Priya pointed out the \
-partition key was wrong the whole time. Felt stupid but she said it happens \
+Long day. Finally got the migration script working after Nadia pointed out the \
+index column was wrong the whole time. Felt stupid but she said it happens \
 constantly. Still nervous about the demo Thursday, and I never followed up with \
-Marcus about the alerting thresholds.
+Theo about the dataset ownership.
 """
 
 let instructions = """
