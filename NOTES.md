@@ -580,6 +580,39 @@ partial answer as partial rather than answering confidently from a subset.
 
 Eight tests cover the estimate, including the short-then-long pattern.
 
+#### `reset()` reset nothing that mattered
+
+Caught in review by someone reading the code rather than running it, and the
+sharpest find in the project.
+
+`reset()` cleared `messages`, `errorMessage`, the audit, and the budget counters.
+It did **not** touch the `LanguageModelSession`, which was a `let` created once in
+`init`. The transcript belongs to the session. So:
+
+- The bar read 0% against a window that was genuinely 90% full, and the next
+  question would fail with `exceededContextWindowSize` on an apparently empty
+  conversation.
+- Worse: **the model still held every previous turn.** The UI showed a fresh
+  chat while the model could still answer from a conversation the user believed
+  was discarded. A meter being wrong is a bug; an app misrepresenting what the
+  model knows is a different category.
+
+The doc comment claimed "a long conversation eventually has to be discarded" —
+describing behaviour the method didn't have. There's no API to trim a transcript
+in place, so `reset()` now replaces the session outright.
+
+**Why it survived:** the visible symptom is subtle and the invisible one requires
+noticing that state lives in a framework object rather than in the properties
+next to it. Nothing about clearing four fields *looks* incomplete.
+
+**Second bug, found while fixing the first.** `used` was a stored counter that
+`record` and `recordInstructions` both added to. `recordInstructions` is async
+and fired from a `Task`, so two resets in quick succession could both land and
+charge the instructions twice. It's now derived —
+`instructionCost + turnCosts.reduce(0, +)` — which makes the drift
+unrepresentable rather than merely unlikely. Same principle as using a
+`@Generable` enum for `Mood`.
+
 Uses `contextSize` and `tokenCount`, the iOS 26.4 additions from WWDC26 session
 241 — with a character-count fallback if the count throws, so the indicator never
 silently freezes.

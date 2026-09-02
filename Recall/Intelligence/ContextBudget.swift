@@ -19,7 +19,14 @@ final class ContextBudget {
 
     private let model = SystemLanguageModel.default
 
-    private(set) var used = 0
+    /// Derived, not accumulated.
+    ///
+    /// This used to be a stored counter that `record` and `recordInstructions`
+    /// added to. Because `recordInstructions` is async and fired from a `Task`,
+    /// two resets in quick succession could both land and charge the
+    /// instructions twice. Computing it removes that by construction.
+    var used: Int { instructionCost + turnCosts.reduce(0, +) }
+
     private(set) var turns = 0
 
     /// Counted once at the start of a conversation, so it must not be charged
@@ -83,7 +90,6 @@ final class ContextBudget {
     var isRunningLow: Bool { exchangesRemaining <= 2 }
 
     func reset() {
-        used = 0
         turns = 0
         instructionCost = 0
         turnCosts = []
@@ -95,7 +101,6 @@ final class ContextBudget {
         for text in [question, answer] + toolOutput where !text.isEmpty {
             turnTokens += (try? await model.tokenCount(for: text)) ?? Self.estimate(text)
         }
-        used += turnTokens
         turnCosts.append(turnTokens)
         turns += 1
     }
@@ -105,7 +110,6 @@ final class ContextBudget {
         let cost = (try? await model.tokenCount(for: Instructions(instructions)))
             ?? Self.estimate(instructions)
         instructionCost = cost
-        used += cost
     }
 
     /// Fallback when the framework can't count: English averages ~4 characters

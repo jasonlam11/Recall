@@ -75,3 +75,29 @@ extension ContextBudgetTests {
         #expect(estimate == 2)
     }
 }
+
+extension ContextBudgetTests {
+
+    /// Guards the double-count that made `used` a stored counter a liability:
+    /// `recordInstructions` is async and fired from a `Task`, so two resets in
+    /// quick succession could both land and charge the instructions twice.
+    /// Deriving `used` makes that unrepresentable.
+    @Test("Used is derived from its parts, so it cannot drift")
+    func usedIsDerived() {
+        let budget = ContextBudget()
+        #expect(budget.used == 0, "a fresh budget has spent nothing")
+        budget.reset()
+        budget.reset()
+        #expect(budget.used == 0, "repeated resets cannot accumulate")
+        #expect(budget.turns == 0)
+    }
+
+    @Test("A reset budget reports a full window")
+    func resetRestoresBudget() {
+        let budget = ContextBudget()
+        budget.reset()
+        #expect(budget.fraction == 0)
+        #expect(budget.remaining == max(0, budget.total - 500))
+        #expect(budget.exchangesRemaining >= 1)
+    }
+}

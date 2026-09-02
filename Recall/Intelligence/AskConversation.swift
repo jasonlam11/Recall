@@ -26,7 +26,14 @@ final class AskConversation {
     private(set) var isResponding = false
     private(set) var errorMessage: String?
 
-    private let session: LanguageModelSession
+    /// Recreated by `reset()`. The transcript lives inside the session, so
+    /// clearing `messages` without replacing this leaves the model holding the
+    /// entire previous conversation.
+    @ObservationIgnored private var session: LanguageModelSession
+
+    /// Kept so a fresh session can be built with the same tools.
+    @ObservationIgnored private let tools: [any Tool]
+
     private let audit: ToolAudit
     let budget = ContextBudget()
 
@@ -57,6 +64,7 @@ final class AskConversation {
 
     init(tools: [any Tool], audit: ToolAudit) {
         self.audit = audit
+        self.tools = tools
         session = LanguageModelSession(tools: tools) { Self.instructions }
         Task { await budget.recordInstructions(Self.instructions) }
     }
@@ -132,10 +140,19 @@ final class AskConversation {
         }
     }
 
-    /// Starts over. The session holds the transcript, and the context window is
-    /// 4096 tokens, so a long conversation eventually has to be discarded rather
-    /// than trimmed silently.
+    /// Starts over.
+    ///
+    /// **Builds a new session.** The transcript belongs to the session, not to
+    /// `messages`, so an earlier version of this cleared the visible history and
+    /// the budget counters while the model still held every previous turn. The
+    /// bar read 0% against a window that was genuinely 90% full, and the model
+    /// could still answer from a conversation the user believed was gone — the
+    /// second being the worse of the two.
+    ///
+    /// There's no API to trim a transcript in place, so the whole session is
+    /// replaced. That is the discard this method has always claimed to do.
     func reset() {
+        session = LanguageModelSession(tools: tools) { Self.instructions }
         messages = []
         errorMessage = nil
         audit.reset()
