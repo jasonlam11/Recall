@@ -8,7 +8,8 @@ Numbers quoted here are reproducible: `./Evaluation/run.sh` for retrieval metric
 `./Benchmark/run.sh` for latency, `xcodebuild test` for the suite.
 
 **Current figures** — retrieval P@1 0.70, Recall@3 0.70, MRR 0.70, abstention
-1.00, overall 0.775; enrichment p50 1932ms; 35 tests. Earlier numbers appear
+1.00, overall 0.775; enrichment p50 1.45–1.75s (it moves ~20% between runs, so a
+range is the honest form); 35 tests. Earlier numbers appear
 where a decision was made against them, and are marked as superseded rather than
 edited out, because the comparison is the point.
 

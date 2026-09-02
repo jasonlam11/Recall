@@ -179,9 +179,13 @@ Latency on an M-series Mac (`./Benchmark/run.sh`):
 
 | operation | p50 |
 |---|---|
-| Enrichment, end to end | 1932ms |
+| Enrichment, end to end | 1.45–1.75s |
 | First streamed snapshot | ~630ms |
 | Embedding one entry | 10ms |
+
+Enrichment is given as a range because it moves ~20% between runs (p50 of 1713,
+1453, and 1742ms across three consecutive runs of six). Quoting a single figure
+to the millisecond would imply precision the measurement doesn't have.
 
 The 190x gap between embedding and enrichment is why entries are indexed inline
 on save while enrichment streams in afterwards.
@@ -196,7 +200,7 @@ open Recall.xcodeproj    # select the "My Mac" scheme, then ⌘R
 ```
 
 ```bash
-xcodebuild -scheme Recall -destination 'platform=macOS' test   # 31 tests
+xcodebuild -scheme Recall -destination 'platform=macOS' test   # 35 tests
 ./Evaluation/run.sh                                            # retrieval metrics
 ./Benchmark/run.sh                                             # latency
 ```
