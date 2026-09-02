@@ -1,12 +1,22 @@
 # Recall — Design Notes
 
-Running log of decisions and their alternatives. Written as I go, not after.
-This doubles as interview prep: every entry is a question I should be able to
-answer cold.
+A log of decisions and the reasoning behind them, grouped by area rather than by
+date. Where a decision was later reversed, both the original reasoning and the
+measurement that overturned it are kept — the reversals are the useful part.
+
+Numbers quoted here are reproducible: `./Evaluation/run.sh` for retrieval metrics,
+`./Benchmark/run.sh` for latency, `xcodebuild test` for the suite.
+
+**Current figures** — retrieval P@1 0.70, Recall@3 0.70, MRR 0.70, abstention
+1.00, overall 0.775; enrichment p50 1932ms; 35 tests. Earlier numbers appear
+where a decision was made against them, and are marked as superseded rather than
+edited out, because the comparison is the point.
 
 ---
 
-## 2026-09-01 — Platform target: macOS first, shipping SDK
+## Platform and framework
+
+### Platform target: macOS first, shipping SDK
 
 **Decision.** Multiplatform SwiftUI app, but develop and test against the **My Mac**
 target, building on the shipping macOS 26.5 SDK (Xcode 26.6).
@@ -22,9 +32,7 @@ target, building on the shipping macOS 26.5 SDK (Xcode 26.6).
 the macOS target has zero external dependencies. Everything v1 needs — guided
 generation, snapshot streaming, tool calling — ships in the current SDK.
 
----
-
-## 2026-09-01 — SDK capability audit
+### SDK capability audit: reading the interface, not the slides
 
 Read the actual `.swiftinterface` in the macOS SDK rather than trusting the WWDC talks.
 
@@ -47,9 +55,28 @@ public protocol Tool<Arguments, Output>: Sendable {
 
 The API moved after the talk. Copying the video's code does not compile.
 
+### The snapshot API differs from the talk
+
+WWDC25 shows `for try await partial in stream` where the element *is* the
+partially generated value. The shipping SDK wraps it:
+
+```swift
+public struct ResponseStream<Content> where Content: Generable {
+    public struct Snapshot {
+        public var content: Content.PartiallyGenerated
+        public var rawContent: GeneratedContent
+    }
+}
+```
+
+So it is `snapshot.content`. Second divergence from the talk after `ToolOutput`.
+Lesson: read the `.swiftinterface`, not the slides.
+
 ---
 
-## 2026-09-01 — Spike result: guided generation works
+## Guided generation and enrichment
+
+### Spike: guided generation works
 
 Confirmed with a throwaway CLI before writing any app code:
 availability check → plain `respond` → `@Generable` struct with `@Guide` constraints.
@@ -62,55 +89,9 @@ for it. Two calls including cold start: ~4.7s.
 **Takeaway.** Constrained decoding is doing real work here — the structure is
 guaranteed by the schema, not by hoping the prompt is obeyed.
 
----
+### Enrichment design
 
-## Open questions
-
-- `NLEmbedding.sentenceEmbedding` vs `NLContextualEmbedding` with mean pooling —
-  measure retrieval quality on my own entries before committing.
-- Where to draw the context-window boundary in Ask mode once the transcript grows.
-
----
-
-## 2026-09-01 — Where the abstraction seam goes
-
-**Decision.** Abstract the *service* (`IntelligenceService`), not the model.
-
-**Why not the model.** The plan originally called for injecting a model behind a
-`ModelProviding` protocol. Reading the SDK killed that: `LanguageModelSession.init`
-takes a concrete `SystemLanguageModel`, so there is no polymorphism to exploit at
-that level in macOS 26. The `LanguageModel` protocol from WWDC26 is macOS 27+.
-
-**What this buys anyway.** A fake service for tests that never loads a model, and
-a place to add `CloudIntelligenceService` when PCC ships — same seam, one
-conformance. Better than a protocol that pretends the SDK is more general than it is.
-
----
-
-## 2026-09-01 — Default actor isolation is MainActor
-
-Xcode 26 templates ship `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` and
-`SWIFT_APPROACHABLE_CONCURRENCY = YES`. Every type is main-actor-isolated unless
-marked otherwise, which is a sane default for an app but wrong for pure values.
-
-First build failed on exactly this: `IntelligenceError.errorDescription` is a
-nonisolated protocol requirement of `LocalizedError`, and it called
-`ModelAvailability.explanation`, which the default had silently made MainActor.
-
-**Decision.** Keep the MainActor default and mark the model/service types
-`nonisolated`: `Mood`, `EntryInsight`, `ModelAvailability`, `IntelligenceError`,
-`IntelligenceService`, `OnDeviceIntelligenceService`. `JournalStore` stays
-`@MainActor` — it wraps SwiftData's `mainContext`, so that isolation is correct
-rather than incidental.
-
-**The rule this encodes.** UI-adjacent types are MainActor; values and services
-that do real work off the main thread are explicitly not.
-
----
-
-## 2026-09-01 — Enrichment design details
-
-- **Fresh session per entry.** Enrichment is stateless. Reusing one session would
+**Fresh session per entry.** Enrichment is stateless. Reusing one session would
   accumulate unrelated transcript history and spend context for no benefit.
 - **Instructions vs prompt.** The extraction rules live in `instructions`; the
   entry text goes in the prompt, delimited. Instructions are the protected channel
@@ -122,9 +103,7 @@ that do real work off the main thread are explicitly not.
   enrichment happens after. A model failure leaves a valid entry with no
   metadata rather than blocking the write.
 
----
-
-## 2026-09-01 — Streaming: measured, and what it actually buys
+### Streaming: measured, and what it actually buys
 
 Instrumented the snapshot stream on a real entry. Six snapshots over 6.56s:
 
@@ -154,28 +133,7 @@ should be honest that it is not the latency fix.
 **Open follow-up.** Measure whether `.contentTagging` has different prefill cost
 than the general model, and whether prewarm actually collapses that 5.9s.
 
----
-
-## 2026-09-01 — Snapshot API differs from the talk (again)
-
-WWDC25 shows `for try await partial in stream` where the element *is* the
-partially generated value. The shipping SDK wraps it:
-
-```swift
-public struct ResponseStream<Content> where Content: Generable {
-    public struct Snapshot {
-        public var content: Content.PartiallyGenerated
-        public var rawContent: GeneratedContent
-    }
-}
-```
-
-So it is `snapshot.content`. Second divergence from the talk after `ToolOutput`.
-Lesson: read the `.swiftinterface`, not the slides.
-
----
-
-## 2026-09-01 — Save order is a product decision
+### Save order is a product decision
 
 `CaptureViewModel.save()` persists the entry *before* enrichment starts, and
 clears the text field immediately. If the model fails, is unavailable, or returns
@@ -192,7 +150,41 @@ intelligence is strictly additive everywhere in this app.
 
 ---
 
-## 2026-09-01 — Timeline refresh: how the store signals change
+## Architecture and concurrency
+
+### Where the abstraction seam goes
+
+**Decision.** Abstract the *service* (`IntelligenceService`), not the model.
+
+**Why not the model.** The plan originally called for injecting a model behind a
+`ModelProviding` protocol. Reading the SDK killed that: `LanguageModelSession.init`
+takes a concrete `SystemLanguageModel`, so there is no polymorphism to exploit at
+that level in macOS 26. The `LanguageModel` protocol from WWDC26 is macOS 27+.
+
+**What this buys anyway.** A fake service for tests that never loads a model, and
+a place to add `CloudIntelligenceService` when PCC ships — same seam, one
+conformance. Better than a protocol that pretends the SDK is more general than it is.
+
+### Default actor isolation is MainActor
+
+Xcode 26 templates ship `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` and
+`SWIFT_APPROACHABLE_CONCURRENCY = YES`. Every type is main-actor-isolated unless
+marked otherwise, which is a sane default for an app but wrong for pure values.
+
+First build failed on exactly this: `IntelligenceError.errorDescription` is a
+nonisolated protocol requirement of `LocalizedError`, and it called
+`ModelAvailability.explanation`, which the default had silently made MainActor.
+
+**Decision.** Keep the MainActor default and mark the model/service types
+`nonisolated`: `Mood`, `EntryInsight`, `ModelAvailability`, `IntelligenceError`,
+`IntelligenceService`, `OnDeviceIntelligenceService`. `JournalStore` stays
+`@MainActor` — it wraps SwiftData's `mainContext`, so that isolation is correct
+rather than incidental.
+
+**The rule this encodes.** UI-adjacent types are MainActor; values and services
+that do real work off the main thread are explicitly not.
+
+### How the store signals change
 
 **Symptom.** Saved entries didn't appear in the timeline. The data was fine —
 two rows in SQLite — but `TimelineView` fetched once in `.task` and never again.
@@ -215,30 +207,51 @@ than a silent bug spread across views.
 `container` and the `context` accessor are `@ObservationIgnored` — they never
 change, so tracking them would just add noise.
 
----
+### Indexing is a backlog worker
 
-## 2026-09-01 — Two bugs found by actually using it
+`Indexer` walks unindexed entries rather than blocking a save. Entries are
+indexed twice: once on raw text immediately (searchable even if enrichment
+fails), then again after the insight lands, because summary + topics + people
+carry more signal than prose alone.
 
-Both invisible to the compiler, found in the first real session:
+`indexBacklog()` runs on launch, which also backfills entries written before the
+embedding layer existed.
 
-**1. The summary truncated to one line.** `Text` inside a `VStack` gets
-compressed when vertical space runs short, and truncates rather than wrapping.
-Fixed with `.fixedSize(horizontal: false, vertical: true)` on the title and
-summary, and by capping the editor's height instead of letting it grow.
+`EmbeddingService` is an `actor` — `NLContextualEmbedding` is a loaded model with
+mutable state, and serializing access keeps it off the main thread without a lock.
 
-**2. The model tagged me as a person.** An entry written in first person came
-back with `people: ["Jason"]`. Technically defensible — the name was in the text
-— but useless: every entry would list the writer. Fixed in `instructions`, not
-in post-processing, because the model should never generate it in the first
-place.
+### Editing is a cache-invalidation problem
 
-**The lesson worth keeping.** Both got through a clean build and a passing spike.
-Neither would have been caught by a unit test I'd have thought to write. Using
-the thing is a distinct kind of testing.
+Editing an entry is not a text update. `insight` and `embedding` are both
+*derived* from the text, so changing the text invalidates them.
 
----
+Leaving them stale would make search silently lie: edit an entry to be about a
+thesis and it would still surface for "gym", because the stored topics and vector
+describe text that no longer exists. Wrong answers with no visible cause are
+worse than missing ones, so `JournalStore.update(_:text:)` clears both. An entry
+briefly showing "Not analyzed" is honest; an entry described by its own past is
+not.
 
-## 2026-09-01 — Detail view, and why there's no tab bar
+**Ordering.** The text commits first and separately, then analysis runs. If
+analysis fails the edit still stands and the entry is simply unanalyzed. Same
+principle as capture: the writing is never at the mercy of the model.
+
+**`EntryEnricher`.** Editing needed the exact sequence capture already used —
+stream, refuse to store a partial insight, re-index once summary and topics
+exist. Extracted rather than duplicated, because the *ordering* is the part
+that's easy to get wrong, and two copies means two chances.
+
+**Re-analyze.** Same machinery, without touching the text. Directly useful right
+now: early entries list the writer themselves and bare pronouns as people,
+written before those instructions were fixed. Prompts improve over time, and
+entries enriched under an older prompt shouldn't be stuck with it.
+
+**UI.** Re-analysis renders the same streaming fill as the composer, so it reads
+as work rather than a frozen pane. The detail view is keyed with `.id(entry.id)`
+so switching selection builds a fresh view model instead of carrying edit state
+between entries.
+
+### Detail view, and why there's no tab bar
 
 Entries were listed but unopenable. Added `EntryDetailView` and made the sidebar
 selectable.
@@ -260,7 +273,9 @@ than hiding the fact.
 
 ---
 
-## 2026-09-01 — F3: measured two embedding models, and neither works alone
+## Retrieval
+
+### Two embedding models measured, neither works alone
 
 **Setup.** 10-entry corpus of realistic journal text, two queries with
 hand-labeled targets sharing no keywords with the query. Measured precision@2
@@ -316,54 +331,7 @@ nonsense. The 20 minutes of measurement is the whole reason the design is right.
 combination. That's F4's job — the model gets candidates via tool calling and
 can reject bad ones.
 
----
-
-## 2026-09-01 — Indexing is a backlog worker
-
-`Indexer` walks unindexed entries rather than blocking a save. Entries are
-indexed twice: once on raw text immediately (searchable even if enrichment
-fails), then again after the insight lands, because summary + topics + people
-carry more signal than prose alone.
-
-`indexBacklog()` runs on launch, which also backfills entries written before the
-embedding layer existed.
-
-`EmbeddingService` is an `actor` — `NLContextualEmbedding` is a loaded model with
-mutable state, and serializing access keeps it off the main thread without a lock.
-
----
-
-## 2026-09-01 — Test suite
-
-11 unit tests on `Vector`, with values hand-computed rather than captured from a
-run: a test asserting whatever the code produced can't catch a regression.
-Includes degenerate cases (mismatched lengths, zero vectors, empty) which return
-0 instead of NaN, and a property test that centering widens spread on
-deliberately clustered vectors.
-
-Deleted Xcode's template UI tests. `RecallUITestsLaunchTests` failed on macOS
-after 122s of screenshot attempts — 33 failures from boilerplate. Replaced with
-one launch smoke test (~4s) that asserts the composer appears; that's the single
-failure a unit test genuinely cannot see. The logic worth testing is unit-tested.
-
----
-
-## 2026-09-01 — Dropped `.searchable` for an explicit field
-
-`.searchable` on a `List` inside a `NavigationSplitView` sidebar didn't surface a
-visible control on macOS — the field went somewhere the user couldn't find it.
-Rather than chase placement values, the sidebar now owns a plain `TextField`
-pinned above the list, with a magnifying glass, an inline progress spinner while
-a query is in flight, and a clear button.
-
-**Tradeoff.** Loses the system search affordances (`⌘F` focus, the platform look).
-Gains a control that is unambiguously present, which for a feature that *is* the
-product is the right trade. Revisit if `.searchable` placement can be pinned
-down; worth filing feedback if the sidebar placement genuinely doesn't render.
-
----
-
-## 2026-09-01 — Ranking was wrong, diagnosed from one real search
+### Ranking was wrong, diagnosed from one real search
 
 Searched "kestrel" over 9 entries. The entry explicitly about waiting for a
 Kestrel offer ranked **6th**. Above it: chess, climbing club,
@@ -407,42 +375,7 @@ implementation still contradicted it. Measuring isn't enough — the weights hav
 to be derived from the numbers, and nothing checked that they were. An argument
 for the evaluation harness being a test, not a report.
 
----
-
-## 2026-09-01 — A test that was wrong, not code that was wrong
-
-`rarityBeatsFrequency` compared `score("kestrel", doc0)` against
-`score("work", doc1)` and expected the first to be larger. Both are 1.0: scores
-are normalized by the query's total IDF, so a single-term query that matches
-scores 1.0 by construction.
-
-That normalization is deliberate — it makes ranking within one query meaningful
-and comparison across different queries meaningless. The test asserted a property
-the design doesn't have. Replaced with one that tests within-query behavior: for
-"kestrel work", the rare half is worth more than the common half, and the two
-sum to 1.0.
-
-Worth remembering: a failing test is a hypothesis about the code, not a verdict.
-
----
-
-## 2026-09-01 — Shared scheme, and dropping the UI test
-
-There was no `.xcscheme` on disk — Xcode auto-generates schemes into
-`xcuserdata`, which is gitignored, so `xcodebuild` behavior wasn't reproducible
-and wouldn't survive a clone. Added a shared scheme under `xcshareddata`.
-
-The scheme's test action includes `RecallTests` only. `RecallUITests` was
-removed: `XCUIApplication.launch()` hung for 60s on this macOS target even
-though the app launches fine by hand (confirmed by screenshot), and the single
-smoke test asserted only that a window appeared. Slow, flaky, near-zero value.
-
-Suite is now 17 tests in 0.019s. A fast green suite gets run; a 60-second flaky
-one gets ignored.
-
----
-
-## 2026-09-01 — Extracted `Ranker`, then evaluated it on the real corpus
+### Extracting `Ranker` so it could be measured
 
 **Refactor.** Ranking logic was inline in `RetrievalService`, which needed
 SwiftData and `@MainActor`, so it could not be run or measured outside the app.
@@ -498,55 +431,9 @@ word). IDF keeps its weight low. Not worth a special case.
 
 ---
 
-## 2026-09-01 — Evaluation as tests, not as a report
+## Tool calling and Ask mode
 
-`RankerTests` — 12 assertions over a labeled 5-entry corpus that mirrors the real
-one: overlapping topics, repeated common words, one rare proper noun.
-
-The point is that the earlier bug — weighting the vector at 0.5 after measuring
-it unreliable — was *documented in this file and contradicted by the code*,
-because nothing checked that the weights followed the measurements. Two tests
-now assert the weight ordering directly, so reweighting against the evidence
-fails the build instead of quietly degrading search.
-
-Suite: 30 tests, 3 suites, 0.29s.
-
----
-
-## 2026-09-01 — Two bugs the compiler could not see
-
-Both found by reading the Xcode console after a run, not by building or testing.
-
-**1. `sparkles.slash` is not a real SF Symbol.** `EntryDetailView` used it for the
-"Not analyzed" state. SwiftUI renders a missing symbol as nothing and logs to the
-console — it does not fail to compile and does not throw. Verified against
-`/System/Library/CoreServices/CoreGlyphs.bundle`: `sparkles` exists,
-`sparkles.slash` does not. Now `circle.dashed`.
-
-**Worth generalizing:** every `systemImage:` string is an unchecked runtime
-lookup. Nothing in the type system protects them. Either verify names against the
-symbol database or wrap them in an enum.
-
-**2. `prewarm()` was churning sessions.** It fired from `.onChange` on the text
-field whenever the field reached one character, so typing and deleting a
-character repeatedly built and discarded a `LanguageModelSession`. The console
-filled with "Passing along Session … in Canceled state in response to
-PrewarmSession". Moved to `.task`, so it runs once when the composer appears.
-
-**Open question, now honest.** I never verified that prewarming reduces the
-measured ~5.9s prefill. The doc comment claimed a benefit on the strength of the
-WWDC talk mentioning the API. Comment corrected to say it's unverified. Measure
-it before relying on it — and if it doesn't help, delete it.
-
-**Note on the SIGTERM.** The debugger paused on `Thread 1: signal SIGTERM` in
-`mach_msg2_trap` at 0% CPU. Not a crash — an external terminate arriving while
-the main thread idled (a `pkill` from a test run). Distinguishing "was killed"
-from "crashed" is worth being able to do at a glance: a crash shows an exception
-or a fatal signal like SIGSEGV/SIGABRT, and the paused frame is in your code.
-
----
-
-## 2026-09-01 — F4: Ask mode, and four failed designs for citations
+### Ask mode, and four failed designs for citations
 
 Tool calling works and query understanding is the real win. For "Why have I been
 anxious lately?" the model searched `terms: ["anxious"]`, got one hit, then
@@ -559,7 +446,7 @@ on guided generation, `SearchJournalTool.Arguments` — terms, optional mood,
 optional timeframe — is the parse step. No separate "structure the question"
 pass, and constrained decoding means the model can't emit a malformed query.
 
-### Citations: four attempts
+#### Citations: four attempts
 
 1. **Ask in `instructions`.** "Cite every claim with the bracketed id." Produced
    *zero* citations. Instructions are a request the model may decline.
@@ -581,7 +468,7 @@ pass, and constrained decoding means the model can't emit a malformed query.
 The general lesson: **don't ask a model to report on itself when a deterministic
 layer already knows the answer.**
 
-### Two tools, because some questions aren't searches
+#### Two tools, because some questions aren't searches
 
 "What did I say I'd follow up on?" made the model search for "follow up" — and
 the words in `openLoops` are things like "official offer from Kestrel", never
@@ -591,7 +478,7 @@ the phrase "follow up". No term matching bridges that gap.
 directly. Some questions are retrieval, some are lookups. A tool per shape beats
 one tool pretending to cover both.
 
-### A bare "no results" caused a retry loop
+#### A bare "no results" caused a retry loop
 
 The model mutated its own query across four calls — `["follow up"]` →
 `["follow-up"]` → `["follow-up-up"]` → `["follow-up-up-up"]` — then the request
@@ -599,7 +486,7 @@ failed outright. The tool now names the topics that *do* appear in the journal,
 giving the model something to correct toward or grounds to stop. Instructions
 also cap it at two searches for the same thing.
 
-### The framework fails intermittently
+#### The framework fails intermittently
 
 `com.apple.tokengeneration Code=10`, surfaced as `GenerationError -1`. Same
 binary, same corpus, same questions: run 1 failed 3 of 4, run 2 failed a
@@ -609,13 +496,13 @@ different one. Not input-dependent — the failure moves.
 Guardrail violations, exceeded context, and unsupported language will fail
 identically the second time, so retrying them just doubles the wait.
 
-### Also fixed: `openLoops` was unsearchable
+#### Also fixed: `openLoops` was unsearchable
 
 `Ranker.Candidate.searchableText` included title, summary, topics, and people but
 not `openLoops`. A field the model populates and retrieval ignores is worse than
 no field at all.
 
-### Still open
+#### Left open here
 
 - Whether the model's judgment actually beats the weighted formula. Unanswered:
   the model calls the tool and accepts what comes back rather than reranking. A
@@ -628,232 +515,7 @@ no field at all.
   it fail and offering "New Conversation", which is honest but crude. Real
   transcript management is unbuilt.
 
----
-
-## 2026-09-01 — Second time a control was invisible
-
-The Ask button existed, in the sidebar's `.toolbar`. The user couldn't find it —
-exactly the failure `.searchable` had in this same sidebar.
-
-Moved to explicit `Write` / `Ask` buttons at the top of the sidebar, tinted to
-show the active mode.
-
-**The pattern worth naming:** twice now, a control placed via a system-managed
-container in a `NavigationSplitView` sidebar on macOS ended up somewhere the user
-never looked. Both times the fix was to stop delegating placement. A control the
-user can't locate is a feature that doesn't exist, and "it's in the toolbar" is
-not a defense.
-
-Cost: fewer system affordances. Worth it for the two controls that are the whole
-app.
-
----
-
-## 2026-09-01 — Editing, and why it's really a cache-invalidation problem
-
-Editing an entry is not a text update. `insight` and `embedding` are both
-*derived* from the text, so changing the text invalidates them.
-
-Leaving them stale would make search silently lie: edit an entry to be about a
-thesis and it would still surface for "gym", because the stored topics and vector
-describe text that no longer exists. Wrong answers with no visible cause are
-worse than missing ones, so `JournalStore.update(_:text:)` clears both. An entry
-briefly showing "Not analyzed" is honest; an entry described by its own past is
-not.
-
-**Ordering.** The text commits first and separately, then analysis runs. If
-analysis fails the edit still stands and the entry is simply unanalyzed. Same
-principle as capture: the writing is never at the mercy of the model.
-
-**`EntryEnricher`.** Editing needed the exact sequence capture already used —
-stream, refuse to store a partial insight, re-index once summary and topics
-exist. Extracted rather than duplicated, because the *ordering* is the part
-that's easy to get wrong, and two copies means two chances.
-
-**Re-analyze.** Same machinery, without touching the text. Directly useful right
-now: early entries list the writer themselves and bare pronouns as people,
-written before those instructions were fixed. Prompts improve over time, and
-entries enriched under an older prompt shouldn't be stuck with it.
-
-**UI.** Re-analysis renders the same streaming fill as the composer, so it reads
-as work rather than a frozen pane. The detail view is keyed with `.id(entry.id)`
-so switching selection builds a fresh view model instead of carrying edit state
-between entries.
-
----
-
-## 2026-09-01 — Evaluation harness, and the bug it caught immediately
-
-`Evaluation/` — 12-entry labeled corpus, 12 labeled queries, compiled against the
-*real* `Ranker`, `LexicalIndex`, and `Vector` sources rather than a copy. Reports
-P@1, Recall@3, MRR, and abstention, sweeps weights, ablates signals, and exits
-nonzero below a floor so it can gate CI.
-
-**First run: overall 0.575, abstention 0.00.** Both queries that should return
-nothing returned confident results — "kayaking submarine trombone" produced two
-matches.
-
-**Why the unit tests missed it.** `RankerTests.noFalsePositives` passes because
-its fixtures have no embeddings, so the vector silently contributes zero. With
-real vectors every entry scores nonzero and clears the floor. A fixture that
-omits a field doesn't test the code that reads it.
-
-### Three fixes, each measured
-
-**1. The vector may reorder, never admit.** A result now requires at least one
-grounded signal — a matched term, topic, person, or mood. Vector similarity can
-reshuffle candidates that already have evidence; it can't introduce one.
-**0.575 → 0.700.**
-
-**2. Common-term cutoff.** A term in more than half the corpus scores zero
-regardless of grammatical class. Didn't fix the stopword query on its own.
-
-**3. A stopword list under the tagger.** `tokenize("the about have with")`
-returned `["about", "have"]` — and "about" is correctly dropped from "nervous
-about the future". `NLTagger` is *context-dependent*: given a fragment with no
-grammar to parse, it mis-tags. Queries are frequently fragments.
-
-Frequency cutoffs don't cover this either; in a twelve-entry corpus a word can be
-pure noise and appear in only a third of entries.
-
-So both: the tagger generalizes across inflections and languages, the list is a
-floor under the worst offenders. Standard IR practice, and the pragmatic answer
-over an elegant one that measurably fails. **0.700 → 0.838, abstention 1.00.**
-
-### Final numbers
-
-```
-P@1 0.80   Recall@3 0.75   MRR 0.80   Abstention 1.00   Overall 0.838
-```
-
-### What the sweep actually says
-
-57 of 75 configurations tie at 0.838. The shipping weights are tied for best —
-but so is almost everything else, including `lexical = 0`. **The query set is too
-small to discriminate between weightings.** It validates correctness, not tuning.
-Claiming these weights are empirically optimal would overstate what 12 queries
-can show. Fixing that means more labeled queries, not more sweeping.
-
-Ablation is more informative: removing the vector costs 0.042 and drops P@1 from
-0.80 to 0.70, so it earns its 0.15. Removing topic/person changes nothing on this
-set, which is a real question mark over those two signals.
-
-### The remaining honest failure
-
-"nervous about the future" and "feeling behind on everything" still miss. Neither
-shares a term with its targets, and the vector doesn't bridge it. That gap is not
-fixable at the retrieval layer — it's what Ask mode's query expansion is for, and
-in testing the model did exactly that, turning "anxious" into "grant application"
-unprompted. Retrieval indexes; the model supplies the semantics.
-
----
-
-## 2026-09-01 — Benchmarks, and a correction to my own numbers
-
-`Benchmark/` measures the on-device model against the real `EntryInsight` schema.
-Cold start is measured in *fresh processes*, because the model stays warm for the
-life of a process — timing it twice in one run would only ever show "warm".
-
-```
-context window     4096 tokens
-instructions         87 tokens
-one entry            59 tokens
-
-cold  first-snapshot 1459ms / 655ms / 629ms   total 3226ms / 2079ms / 1937ms
-warm  first-snapshot  666ms / 630ms / 627ms   total 2102ms / 2154ms / 2515ms
-
-enrichment (steady state, n=5)   min 1773ms   p50 1932ms   max 2040ms
-embedding one entry (n=45)       min   10ms   p50   10ms   max   21ms
-```
-
-### Correction: enrichment is ~2s, not ~6s
-
-An earlier note in this file recorded "~5.9s before the first snapshot, ~90% of
-latency is prefill" and reasoned from it. That measurement was the *first ever*
-Foundation Models call on this machine — one-time OS-level model loading, not
-steady state. Steady state is p50 **1.9s** total and **~630ms** to first
-snapshot.
-
-The mistake was generalizing from a single unrepeated sample. The fix was
-measuring across fresh processes.
-
-### `prewarm()` deleted
-
-The same note flagged that prewarm's benefit was unverified. Measured: cold
-first-snapshot 655/629ms, prewarmed 666/630/627ms. **No effect.** The only slow
-run was the first after boot, which is OS asset loading and happens regardless.
-
-So it's removed — the API exists and does something real in some contexts, but
-not measurably here, and code that exists on the strength of a WWDC mention
-rather than a measurement is cargo cult. Deleting it also removes the session
-churn it caused.
-
-### What the numbers actually say about the design
-
-Embedding is **10ms** and enrichment is **1900ms** — 190x apart. That justifies
-the split: entries are embedded inline on save (imperceptible) while enrichment
-streams in afterwards. It also means re-indexing after enrichment is free, so
-there was never a reason to skip it.
-
-The 87-token instructions and 59-token entry against a 4096-token window confirm
-the tool-payload budgeting: five full-text hits at ~58 tokens each is ~7% of
-context.
-
----
-
-## 2026-09-01 — Accessibility pass
-
-Focused on the two things that actually break VoiceOver rather than a blanket
-sweep:
-
-**Icon-only controls had no label.** The Ask send button, the search clear
-button, the new-conversation button, and both progress spinners announced as
-"button" or nothing. All labelled.
-
-**Composite rows read as fragments.** A timeline row is a title, a date, a
-summary, a mood, and two topics — six separate announcements to swipe through for
-one entry. `.accessibilityElement(children: .combine)` makes it one, matching
-what a sighted user perceives. Same for the streaming insight card and the
-"searching" state.
-
-**Speaker attribution in Ask.** "You" and "Recall" are visual captions above each
-message. Read separately, a VoiceOver user loses track of who said what across a
-scroll, so the caption is hidden and folded into the message's own label.
-
-**Mode buttons carry `.isSelected`.** Tint communicates the active mode visually
-and nothing otherwise.
-
-Dynamic Type needed no work — every font is semantic (`.body`, `.headline`,
-`.caption`) and the layouts that could truncate already use
-`.fixedSize(horizontal: false, vertical: true)` from the earlier truncation bug.
-
-**Not verified.** I can't run VoiceOver from here. This is a code-level pass
-against known failure modes, not a tested one. Worth an actual pass with
-VoiceOver on (⌘F5) before claiming it's accessible.
-
----
-
-## 2026-09-01 — README
-
-Written for the person who opens the repo from a referral and gives it ninety
-seconds. Leads with the problem, not the feature list; states the two
-architectural rules the code actually holds to; and puts the measured findings —
-the failed embeddings, the four citation designs, the deleted `prewarm()` — above
-the API tour, because those are the parts that show engineering judgment rather
-than framework familiarity.
-
-Numbers are quoted from the harnesses in the repo, so anyone can reproduce them.
-The weight sweep is reported as inconclusive rather than as validation, and
-limitations are listed honestly, including the framework's intermittent
-generation failures.
-
-**Still needed: the demo GIF.** A journaling app with no screenshot asks the
-reader to imagine it. Record with ⌘⇧5: write an entry, watch tags stream in,
-search by meaning, ask a question, click a citation through to its entry.
-
----
-
-## 2026-09-01 — Making the context window visible
+### Making the context window visible
 
 The 4096-token window was a hard limit the user couldn't see and hadn't agreed
 to. The app let them reach it and *then* reported failure.
@@ -885,7 +547,381 @@ silently freezes.
 
 ---
 
-## 2026-09-02 — Visual design pass
+## Measurement
+
+### The evaluation harness, and the bug it caught immediately
+
+`Evaluation/` — 12-entry labeled corpus, 12 labeled queries, compiled against the
+*real* `Ranker`, `LexicalIndex`, and `Vector` sources rather than a copy. Reports
+P@1, Recall@3, MRR, and abstention, sweeps weights, ablates signals, and exits
+nonzero below a floor so it can gate CI.
+
+**First run: overall 0.575, abstention 0.00.** Both queries that should return
+nothing returned confident results — "kayaking submarine trombone" produced two
+matches.
+
+**Why the unit tests missed it.** `RankerTests.noFalsePositives` passes because
+its fixtures have no embeddings, so the vector silently contributes zero. With
+real vectors every entry scores nonzero and clears the floor. A fixture that
+omits a field doesn't test the code that reads it.
+
+#### Three fixes, each measured
+
+**1. The vector may reorder, never admit.** A result now requires at least one
+grounded signal — a matched term, topic, person, or mood. Vector similarity can
+reshuffle candidates that already have evidence; it can't introduce one.
+**0.575 → 0.700.**
+
+**2. Common-term cutoff.** A term in more than half the corpus scores zero
+regardless of grammatical class. Didn't fix the stopword query on its own.
+
+**3. A stopword list under the tagger.** `tokenize("the about have with")`
+returned `["about", "have"]` — and "about" is correctly dropped from "nervous
+about the future". `NLTagger` is *context-dependent*: given a fragment with no
+grammar to parse, it mis-tags. Queries are frequently fragments.
+
+Frequency cutoffs don't cover this either; in a twelve-entry corpus a word can be
+pure noise and appear in only a third of entries.
+
+So both: the tagger generalizes across inflections and languages, the list is a
+floor under the worst offenders. Standard IR practice, and the pragmatic answer
+over an elegant one that measurably fails. **0.700 → 0.838, abstention 1.00.**
+
+#### Numbers at this point
+
+```
+P@1 0.80   Recall@3 0.75   MRR 0.80   Abstention 1.00   Overall 0.838
+```
+
+These are against the original corpus, which was later replaced. **Current
+figures are in "Fictional fixtures" below: overall 0.775.** The three fixes above
+are what produced the improvement; the absolute values shifted when the fixture
+did.
+
+#### What the sweep actually says
+
+57 of 75 configurations tie at the top score. The shipping weights are tied for
+best —
+but so is almost everything else, including `lexical = 0`. **The query set is too
+small to discriminate between weightings.** It validates correctness, not tuning.
+Claiming these weights are empirically optimal would overstate what 12 queries
+can show. Fixing that means more labeled queries, not more sweeping.
+
+Ablation is more informative: removing the vector costs 0.042 and drops P@1 from
+0.80 to 0.70, so it earns its 0.15. Removing topic/person changes nothing on this
+set, which is a real question mark over those two signals.
+
+#### The remaining honest failure
+
+"nervous about the future" and "feeling behind on everything" still miss. Neither
+shares a term with its targets, and the vector doesn't bridge it. That gap is not
+fixable at the retrieval layer — it's what Ask mode's query expansion is for, and
+in testing the model did exactly that, turning "anxious" into "grant application"
+unprompted. Retrieval indexes; the model supplies the semantics.
+
+### Evaluation as tests, not as a report
+
+`RankerTests` — 12 assertions over a labeled 5-entry corpus that mirrors the real
+one: overlapping topics, repeated common words, one rare proper noun.
+
+The point is that the earlier bug — weighting the vector at 0.5 after measuring
+it unreliable — was *documented in this file and contradicted by the code*,
+because nothing checked that the weights followed the measurements. Two tests
+now assert the weight ordering directly, so reweighting against the evidence
+fails the build instead of quietly degrading search.
+
+Suite: 30 tests, 3 suites, 0.29s.
+
+### Benchmarks, and a correction to my own numbers
+
+`Benchmark/` measures the on-device model against the real `EntryInsight` schema.
+Cold start is measured in *fresh processes*, because the model stays warm for the
+life of a process — timing it twice in one run would only ever show "warm".
+
+```
+context window     4096 tokens
+instructions         87 tokens
+one entry            59 tokens
+
+cold  first-snapshot 1459ms / 655ms / 629ms   total 3226ms / 2079ms / 1937ms
+warm  first-snapshot  666ms / 630ms / 627ms   total 2102ms / 2154ms / 2515ms
+
+enrichment (steady state, n=5)   min 1773ms   p50 1932ms   max 2040ms
+embedding one entry (n=45)       min   10ms   p50   10ms   max   21ms
+```
+
+#### Correction: enrichment is ~2s, not ~6s
+
+An earlier note in this file recorded "~5.9s before the first snapshot, ~90% of
+latency is prefill" and reasoned from it. That measurement was the *first ever*
+Foundation Models call on this machine — one-time OS-level model loading, not
+steady state. Steady state is p50 **1.9s** total and **~630ms** to first
+snapshot.
+
+The mistake was generalizing from a single unrepeated sample. The fix was
+measuring across fresh processes.
+
+#### `prewarm()` deleted
+
+The same note flagged that prewarm's benefit was unverified. Measured: cold
+first-snapshot 655/629ms, prewarmed 666/630/627ms. **No effect.** The only slow
+run was the first after boot, which is OS asset loading and happens regardless.
+
+So it's removed — the API exists and does something real in some contexts, but
+not measurably here, and code that exists on the strength of a WWDC mention
+rather than a measurement is cargo cult. Deleting it also removes the session
+churn it caused.
+
+#### What the numbers actually say about the design
+
+Embedding is **10ms** and enrichment is **1900ms** — 190x apart. That justifies
+the split: entries are embedded inline on save (imperceptible) while enrichment
+streams in afterwards. It also means re-indexing after enrichment is free, so
+there was never a reason to skip it.
+
+The 87-token instructions and 59-token entry against a 4096-token window confirm
+the tool-payload budgeting: five full-text hits at ~58 tokens each is ~7% of
+context.
+
+### A test that was wrong, not code that was wrong
+
+`rarityBeatsFrequency` compared `score("kestrel", doc0)` against
+`score("work", doc1)` and expected the first to be larger. Both are 1.0: scores
+are normalized by the query's total IDF, so a single-term query that matches
+scores 1.0 by construction.
+
+That normalization is deliberate — it makes ranking within one query meaningful
+and comparison across different queries meaningless. The test asserted a property
+the design doesn't have. Replaced with one that tests within-query behavior: for
+"kestrel work", the rare half is worth more than the common half, and the two
+sum to 1.0.
+
+Worth remembering: a failing test is a hypothesis about the code, not a verdict.
+
+### Fictional fixtures, and the bug the rename exposed
+
+Before making the repository public: the evaluation corpus and this log described
+my actual life. Real employer, real colleagues by name, real pending offer, real
+anxiety about it. None of that belongs in a public repo, and the names in
+particular belonged to people who never agreed to appear in one.
+
+The journal database itself was never tracked — it lives in the app container —
+so only fixtures and notes needed rewriting. `Evaluation/corpus.json` is now
+wholly fictional, and every personal detail in this file, the benchmarks, and the
+tests is replaced.
+
+#### The numbers changed, and I am not tuning them back
+
+New corpus, honestly harder:
+
+```
+before (old corpus)   P@1 0.80   R@3 0.75   MRR 0.80   abstention 1.00   overall 0.838
+after  (fictional)    P@1 0.70   R@3 0.70   MRR 0.70   abstention 1.00   overall 0.775
+```
+
+"unfinished conversations" now shares no term with its targets, where the old
+phrasing happened to share "work". Adjusting the fixture to recover 0.838 would
+be tuning the test to the answer — the precise failure the harness exists to
+prevent. **0.775 is the number.**
+
+#### Ablation changed more than the headline
+
+```
+all signals       overall 0.775   P@1 0.70
+no vector         overall 0.775   P@1 0.70    <- no difference
+no lexical        overall 0.688   P@1 0.60
+no topic/person   overall 0.775   P@1 0.70    <- no difference
+```
+
+On the old corpus the vector was worth 0.042. On this one it is worth **nothing**,
+and neither are the topic and person signals. Only lexical matching demonstrably
+earns its weight.
+
+That is a genuinely uncomfortable result and worth stating plainly rather than
+burying: three of five signals have no measured benefit. They stay for now
+because the vector is the only one that *could* help a query sharing no
+vocabulary with its target — but that has never been demonstrated, and "it might
+help in principle" is exactly the reasoning `prewarm()` died for. If a larger
+labelled set still shows nothing, they should go.
+
+#### `NLTagger` dropped a proper noun
+
+Renaming the fixture surfaced a real bug. `tokenize("kestrel work")` returned
+`["work"]`: the tagger classified an unfamiliar proper noun as an **interjection**
+when followed by another word, and interjections were on the drop list. The same
+word alone tags as `OtherWord` and survives.
+
+```
+tokenize("kestrel")       -> ["kestrel"]
+tokenize("kestrel work")  -> ["work"]
+tokenize("kestrel offer") -> ["offer"]
+```
+
+**Searching for an unusual name could return nothing.** The previous fixture
+happened to use a proper noun the tagger recognised as a noun, so the bug stayed
+invisible for as long as the test data avoided the case that triggers it.
+
+This is the second failure from the same property — the tagger is contextual, and
+queries are fragments where context is missing. First it kept a stopword; now it
+deleted a name. Grammatical filtering is removed; the fixed stopword list is the
+only filter. Metrics unchanged at 0.775, so the tagger was contributing nothing
+except the bug.
+
+The cost is that the list is English-only where the tagger generalised across
+languages. Worth it — a search engine that loses proper nouns is broken in a way
+generality doesn't compensate for.
+
+**A regression test now pins it**, and the lesson is about fixtures: a test
+corpus using only vocabulary the tools recognise cannot find the case where they
+don't. The fixture was doing less work than it appeared to.
+
+---
+
+## Testing and tooling
+
+### Test suite
+
+11 unit tests on `Vector`, with values hand-computed rather than captured from a
+run: a test asserting whatever the code produced can't catch a regression.
+Includes degenerate cases (mismatched lengths, zero vectors, empty) which return
+0 instead of NaN, and a property test that centering widens spread on
+deliberately clustered vectors.
+
+Deleted Xcode's template UI tests. `RecallUITestsLaunchTests` failed on macOS
+after 122s of screenshot attempts — 33 failures from boilerplate. Replaced with
+one launch smoke test (~4s) that asserts the composer appears; that's the single
+failure a unit test genuinely cannot see. The logic worth testing is unit-tested.
+
+### Shared scheme, and dropping the UI test
+
+There was no `.xcscheme` on disk — Xcode auto-generates schemes into
+`xcuserdata`, which is gitignored, so `xcodebuild` behavior wasn't reproducible
+and wouldn't survive a clone. Added a shared scheme under `xcshareddata`.
+
+The scheme's test action includes `RecallTests` only. `RecallUITests` was
+removed: `XCUIApplication.launch()` hung for 60s on this macOS target even
+though the app launches fine by hand (confirmed by screenshot), and the single
+smoke test asserted only that a window appeared. Slow, flaky, near-zero value.
+
+Suite is now 17 tests in 0.019s. A fast green suite gets run; a 60-second flaky
+one gets ignored.
+
+---
+
+## Interface
+
+### Two bugs found by using it
+
+Both invisible to the compiler, found in the first real session:
+
+**1. The summary truncated to one line.** `Text` inside a `VStack` gets
+compressed when vertical space runs short, and truncates rather than wrapping.
+Fixed with `.fixedSize(horizontal: false, vertical: true)` on the title and
+summary, and by capping the editor's height instead of letting it grow.
+
+**2. The model tagged me as a person.** An entry written in first person came
+back with `people: ["Jason"]`. Technically defensible — the name was in the text
+— but useless: every entry would list the writer. Fixed in `instructions`, not
+in post-processing, because the model should never generate it in the first
+place.
+
+**The lesson worth keeping.** Both got through a clean build and a passing spike.
+Neither would have been caught by a unit test I'd have thought to write. Using
+the thing is a distinct kind of testing.
+
+### Two bugs the compiler could not see
+
+Both found by reading the Xcode console after a run, not by building or testing.
+
+**1. `sparkles.slash` is not a real SF Symbol.** `EntryDetailView` used it for the
+"Not analyzed" state. SwiftUI renders a missing symbol as nothing and logs to the
+console — it does not fail to compile and does not throw. Verified against
+`/System/Library/CoreServices/CoreGlyphs.bundle`: `sparkles` exists,
+`sparkles.slash` does not. Now `circle.dashed`.
+
+**Worth generalizing:** every `systemImage:` string is an unchecked runtime
+lookup. Nothing in the type system protects them. Either verify names against the
+symbol database or wrap them in an enum.
+
+**2. `prewarm()` was churning sessions.** It fired from `.onChange` on the text
+field whenever the field reached one character, so typing and deleting a
+character repeatedly built and discarded a `LanguageModelSession`. The console
+filled with "Passing along Session … in Canceled state in response to
+PrewarmSession". Moved to `.task`, so it runs once when the composer appears.
+
+**Open question, now honest.** I never verified that prewarming reduces the
+measured ~5.9s prefill. The doc comment claimed a benefit on the strength of the
+WWDC talk mentioning the API. Comment corrected to say it's unverified. Measure
+it before relying on it — and if it doesn't help, delete it.
+
+**Note on the SIGTERM.** The debugger paused on `Thread 1: signal SIGTERM` in
+`mach_msg2_trap` at 0% CPU. Not a crash — an external terminate arriving while
+the main thread idled (a `pkill` from a test run). Distinguishing "was killed"
+from "crashed" is worth being able to do at a glance: a crash shows an exception
+or a fatal signal like SIGSEGV/SIGABRT, and the paused frame is in your code.
+
+### Dropping `.searchable` for an explicit field
+
+`.searchable` on a `List` inside a `NavigationSplitView` sidebar didn't surface a
+visible control on macOS — the field went somewhere the user couldn't find it.
+Rather than chase placement values, the sidebar now owns a plain `TextField`
+pinned above the list, with a magnifying glass, an inline progress spinner while
+a query is in flight, and a clear button.
+
+**Tradeoff.** Loses the system search affordances (`⌘F` focus, the platform look).
+Gains a control that is unambiguously present, which for a feature that *is* the
+product is the right trade. Revisit if `.searchable` placement can be pinned
+down; worth filing feedback if the sidebar placement genuinely doesn't render.
+
+### The second invisible control
+
+The Ask button existed, in the sidebar's `.toolbar`. The user couldn't find it —
+exactly the failure `.searchable` had in this same sidebar.
+
+Moved to explicit `Write` / `Ask` buttons at the top of the sidebar, tinted to
+show the active mode.
+
+**The pattern worth naming:** twice now, a control placed via a system-managed
+container in a `NavigationSplitView` sidebar on macOS ended up somewhere the user
+never looked. Both times the fix was to stop delegating placement. A control the
+user can't locate is a feature that doesn't exist, and "it's in the toolbar" is
+not a defense.
+
+Cost: fewer system affordances. Worth it for the two controls that are the whole
+app.
+
+### Three problems only a screenshot could show
+
+**1. Selected rows were illegible.** Dark text on a solid terracotta fill. Cause:
+row text used explicit `Theme.ink` / `Theme.inkSecondary`, and an explicit colour
+defeats the system's selection-contrast inversion. `.primary` and `.secondary`
+invert; a hardcoded colour doesn't.
+
+Worth generalising: **inside a selectable `List` row, use semantic foreground
+styles.** Design-system colours are right everywhere else and wrong here.
+
+**2. The model returned "no people" as a person.** The chip read *"no people"*,
+and open loops listed *"no open loops"* — the model answering the question in
+prose instead of returning an empty array.
+
+Fixed in the instructions, and then guaranteed in code, because instructions are
+a request the model may decline. `EntryInsight.dropPlaceholders` matches exactly
+against a small set plus "no <field name>" — deliberately *not* any string
+starting with "no", because an entry can legitimately be about "no sleep" or "no
+response from Kestrel". Dropping those would be a worse bug than the one being
+fixed. Three tests cover both directions.
+
+**3. ~450pt of dead space in the composer.** A `TextEditor` inside a `ScrollView`
+expands to fill whatever height it's offered, so `minHeight: 220` became 450 and
+the Save button floated in the middle of an empty page, with the insight card
+pushed far below the text it described. Capped with `maxHeight`.
+
+**None of these were visible from the code**, and none would fail a build or a
+test. The selection bug needed a selected row, the placeholder bug needed an
+entry mentioning nobody, and the layout bug needed a window. Screenshots have now
+found six defects in this project — more than any other single method.
+
+### Visual design
 
 The app worked and read as a form with an AI attached. Six changes, in order of
 how much each moved that.
@@ -932,42 +968,37 @@ make from here.
 remaining signal that this is a student project, and it appears in the Dock, the
 demo recording, and every screenshot.
 
----
+### Accessibility
 
-## 2026-09-02 — Three problems only a screenshot could show
+Focused on the two things that actually break VoiceOver rather than a blanket
+sweep:
 
-**1. Selected rows were illegible.** Dark text on a solid terracotta fill. Cause:
-row text used explicit `Theme.ink` / `Theme.inkSecondary`, and an explicit colour
-defeats the system's selection-contrast inversion. `.primary` and `.secondary`
-invert; a hardcoded colour doesn't.
+**Icon-only controls had no label.** The Ask send button, the search clear
+button, the new-conversation button, and both progress spinners announced as
+"button" or nothing. All labelled.
 
-Worth generalising: **inside a selectable `List` row, use semantic foreground
-styles.** Design-system colours are right everywhere else and wrong here.
+**Composite rows read as fragments.** A timeline row is a title, a date, a
+summary, a mood, and two topics — six separate announcements to swipe through for
+one entry. `.accessibilityElement(children: .combine)` makes it one, matching
+what a sighted user perceives. Same for the streaming insight card and the
+"searching" state.
 
-**2. The model returned "no people" as a person.** The chip read *"no people"*,
-and open loops listed *"no open loops"* — the model answering the question in
-prose instead of returning an empty array.
+**Speaker attribution in Ask.** "You" and "Recall" are visual captions above each
+message. Read separately, a VoiceOver user loses track of who said what across a
+scroll, so the caption is hidden and folded into the message's own label.
 
-Fixed in the instructions, and then guaranteed in code, because instructions are
-a request the model may decline. `EntryInsight.dropPlaceholders` matches exactly
-against a small set plus "no <field name>" — deliberately *not* any string
-starting with "no", because an entry can legitimately be about "no sleep" or "no
-response from Kestrel". Dropping those would be a worse bug than the one being
-fixed. Three tests cover both directions.
+**Mode buttons carry `.isSelected`.** Tint communicates the active mode visually
+and nothing otherwise.
 
-**3. ~450pt of dead space in the composer.** A `TextEditor` inside a `ScrollView`
-expands to fill whatever height it's offered, so `minHeight: 220` became 450 and
-the Save button floated in the middle of an empty page, with the insight card
-pushed far below the text it described. Capped with `maxHeight`.
+Dynamic Type needed no work — every font is semantic (`.body`, `.headline`,
+`.caption`) and the layouts that could truncate already use
+`.fixedSize(horizontal: false, vertical: true)` from the earlier truncation bug.
 
-**None of these were visible from the code**, and none would fail a build or a
-test. The selection bug needed a selected row, the placeholder bug needed an
-entry mentioning nobody, and the layout bug needed a window. Screenshots have now
-found six defects in this project — more than any other single method.
+**Not verified.** I can't run VoiceOver from here. This is a code-level pass
+against known failure modes, not a tested one. Worth an actual pass with
+VoiceOver on (⌘F5) before claiming it's accessible.
 
----
-
-## 2026-09-02 — App icon
+### App icon
 
 Two lines of writing with a thread running through them, ending in a loop — the
 throughline the app is for. Three colours, all from `Theme`.
@@ -996,79 +1027,45 @@ lists `AppIcon` in the compiled catalogue.
 
 ---
 
-## 2026-09-02 — Sanitising the repo, and the bug it exposed
+## Documentation
 
-Before making the repository public: the evaluation corpus and this log described
-my actual life. Real employer, real colleagues by name, real pending offer, real
-anxiety about it. None of that belongs in a public repo, and the names in
-particular belonged to people who never agreed to appear in one.
+### README
 
-The journal database itself was never tracked — it lives in the app container —
-so only fixtures and notes needed rewriting. `Evaluation/corpus.json` is now
-wholly fictional, and every personal detail in this file, the benchmarks, and the
-tests is replaced.
+Written for the person who opens the repo from a referral and gives it ninety
+seconds. Leads with the problem, not the feature list; states the two
+architectural rules the code actually holds to; and puts the measured findings —
+the failed embeddings, the four citation designs, the deleted `prewarm()` — above
+the API tour, because those are the parts that show engineering judgment rather
+than framework familiarity.
 
-### The numbers changed, and I am not tuning them back
+Numbers are quoted from the harnesses in the repo, so anyone can reproduce them.
+The weight sweep is reported as inconclusive rather than as validation, and
+limitations are listed honestly, including the framework's intermittent
+generation failures.
 
-New corpus, honestly harder:
+**Still needed: the demo GIF.** A journaling app with no screenshot asks the
+reader to imagine it. Record with ⌘⇧5: write an entry, watch tags stream in,
+search by meaning, ask a question, click a citation through to its entry.
 
-```
-before (old corpus)   P@1 0.80   R@3 0.75   MRR 0.80   abstention 1.00   overall 0.838
-after  (fictional)    P@1 0.70   R@3 0.70   MRR 0.70   abstention 1.00   overall 0.775
-```
+---
 
-"unfinished conversations" now shares no term with its targets, where the old
-phrasing happened to share "work". Adjusting the fixture to recover 0.838 would
-be tuning the test to the answer — the precise failure the harness exists to
-prevent. **0.775 is the number.**
+## Open questions
 
-### Ablation changed more than the headline
-
-```
-all signals       overall 0.775   P@1 0.70
-no vector         overall 0.775   P@1 0.70    <- no difference
-no lexical        overall 0.688   P@1 0.60
-no topic/person   overall 0.775   P@1 0.70    <- no difference
-```
-
-On the old corpus the vector was worth 0.042. On this one it is worth **nothing**,
-and neither are the topic and person signals. Only lexical matching demonstrably
-earns its weight.
-
-That is a genuinely uncomfortable result and worth stating plainly rather than
-burying: three of five signals have no measured benefit. They stay for now
-because the vector is the only one that *could* help a query sharing no
-vocabulary with its target — but that has never been demonstrated, and "it might
-help in principle" is exactly the reasoning `prewarm()` died for. If a larger
-labelled set still shows nothing, they should go.
-
-### `NLTagger` dropped a proper noun
-
-Renaming the fixture surfaced a real bug. `tokenize("kestrel work")` returned
-`["work"]`: the tagger classified an unfamiliar proper noun as an **interjection**
-when followed by another word, and interjections were on the drop list. The same
-word alone tags as `OtherWord` and survives.
-
-```
-tokenize("kestrel")       -> ["kestrel"]
-tokenize("kestrel work")  -> ["work"]
-tokenize("kestrel offer") -> ["offer"]
-```
-
-**Searching for an unusual name could return nothing.** The previous fixture
-happened to use a proper noun the tagger recognised as a noun, so the bug stayed
-invisible for as long as the test data avoided the case that triggers it.
-
-This is the second failure from the same property — the tagger is contextual, and
-queries are fragments where context is missing. First it kept a stopword; now it
-deleted a name. Grammatical filtering is removed; the fixed stopword list is the
-only filter. Metrics unchanged at 0.775, so the tagger was contributing nothing
-except the bug.
-
-The cost is that the list is English-only where the tagger generalised across
-languages. Worth it — a search engine that loses proper nouns is broken in a way
-generality doesn't compensate for.
-
-**A regression test now pins it**, and the lesson is about fixtures: a test
-corpus using only vocabulary the tools recognise cannot find the case where they
-don't. The fixture was doing less work than it appeared to.
+- **Does the vector signal earn its place?** Ablating it changes no metric on the
+  current query set. It stays only because it is the one signal that could help a
+  query sharing no vocabulary with its target — but that has never been
+  demonstrated, and "it might help in principle" is exactly the reasoning
+  `prewarm()` was deleted for. A larger labelled set should settle it.
+- **Do the topic and person signals earn theirs?** Same result: ablating them
+  changes nothing measurable.
+- **Does the model's judgement beat the weighted formula?** Still unanswered. Ask
+  mode calls the tool and accepts what comes back rather than reranking. Testing
+  it needs a labelled question set with expected entries.
+- **Transcript management.** The 4096-token window is surfaced to the user but
+  never managed: a full conversation must be discarded rather than summarised or
+  trimmed.
+- **`NLEmbedding.sentenceEmbedding` vs mean-pooled `NLContextualEmbedding`** —
+  both measured poorly, but neither was tried against a corpus of hundreds of
+  entries, where centering has more to work with.
+- **Answer quality varies** and isn't measured. Some answers quote precisely;
+  others trail off mid-thought. There is no rubric for this yet.
