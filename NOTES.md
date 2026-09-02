@@ -627,3 +627,22 @@ no field at all.
 - The 4096-token window bounds conversation length. Currently handled by letting
   it fail and offering "New Conversation", which is honest but crude. Real
   transcript management is unbuilt.
+
+---
+
+## 2026-09-01 — Second time a control was invisible
+
+The Ask button existed, in the sidebar's `.toolbar`. The user couldn't find it —
+exactly the failure `.searchable` had in this same sidebar.
+
+Moved to explicit `Write` / `Ask` buttons at the top of the sidebar, tinted to
+show the active mode.
+
+**The pattern worth naming:** twice now, a control placed via a system-managed
+container in a `NavigationSplitView` sidebar on macOS ended up somewhere the user
+never looked. Both times the fix was to stop delegating placement. A control the
+user can't locate is a feature that doesn't exist, and "it's in the toolbar" is
+not a defense.
+
+Cost: fewer system affordances. Worth it for the two controls that are the whole
+app.

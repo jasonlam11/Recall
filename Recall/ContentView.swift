@@ -25,6 +25,51 @@ struct ContentView: View {
         _search = State(initialValue: SearchViewModel(retrieval: retrieval, store: store))
     }
 
+    /// The two things you can do, as visible controls rather than toolbar
+    /// items. The toolbar versions were there and unfindable — the same problem
+    /// `.searchable` had in this sidebar. A control the user can't locate is
+    /// a feature that doesn't exist.
+    @ViewBuilder
+    private var modePicker: some View {
+        HStack(spacing: 8) {
+            Button {
+                isAsking = false
+                selection = nil
+            } label: {
+                Label("Write", systemImage: "square.and.pencil")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .tint(isWriting ? .accentColor : nil)
+
+            Button {
+                isAsking = true
+                selection = nil
+            } label: {
+                Label("Ask", systemImage: "bubble.left.and.text.bubble.right")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .tint(isAsking ? .accentColor : nil)
+
+            if isAsking && !conversation.messages.isEmpty {
+                // The transcript lives in the session and the window is 4096
+                // tokens, so a long conversation must be discardable.
+                Button {
+                    conversation.reset()
+                } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                }
+                .buttonStyle(.bordered)
+                .help("Start a new conversation")
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.top, 10)
+    }
+
+    private var isWriting: Bool { !isAsking && selection == nil }
+
     private var selectedEntry: JournalEntry? {
         guard let selection else { return nil }
         return store.entries.first { $0.id == selection }
@@ -32,32 +77,13 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
-            TimelineView(store: store, selection: $selection, search: search)
-                .navigationTitle("Recall")
-                .frame(minWidth: 300)
-                .toolbar {
-                    Button("Ask", systemImage: "bubble.left.and.text.bubble.right") {
-                        isAsking = true
-                        selection = nil
-                    }
-                    .disabled(isAsking)
-
-                    Button("New Entry", systemImage: "square.and.pencil") {
-                        isAsking = false
-                        selection = nil
-                    }
-                    .disabled(!isAsking && selection == nil)
-
-                    // The transcript lives in the session and the context
-                    // window is 4096 tokens, so a long conversation has to be
-                    // discardable rather than silently trimmed.
-                    Button("New Conversation", systemImage: "arrow.counterclockwise") {
-                        conversation.reset()
-                        isAsking = true
-                        selection = nil
-                    }
-                    .disabled(conversation.messages.isEmpty)
-                }
+            VStack(spacing: 0) {
+                modePicker
+                Divider()
+                TimelineView(store: store, selection: $selection, search: search)
+            }
+            .navigationTitle("Recall")
+            .frame(minWidth: 300)
         } detail: {
             // Three modes in one column, driven by two pieces of state. Selecting
             // an entry always wins over asking, since it's the more specific
