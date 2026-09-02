@@ -15,6 +15,15 @@ nonisolated struct LexicalIndex {
     private let idf: [String: Double]
     private let documentCount: Int
 
+    /// A term appearing in more than this share of the corpus is treated as
+    /// carrying no evidence, regardless of grammatical class.
+    ///
+    /// Function-word filtering by `NLTagger` handles determiners, prepositions,
+    /// and pronouns, but auxiliaries slip through — "have" is tagged a verb, and
+    /// on its own it let the query "the about have with" return three confident
+    /// results. Frequency catches what grammar misses.
+    private static let commonTermThreshold = 0.5
+
     init(documents: [String]) {
         documentCount = documents.count
         var frequency: [String: Int] = [:]
@@ -32,7 +41,11 @@ nonisolated struct LexicalIndex {
         // to exactly 0 is the point — a word in every entry distinguishes
         // nothing, so it should contribute nothing.
         let n = Double(max(documents.count, 1))
-        idf = frequency.mapValues { max(0, log((n + 1) / (Double($0) + 1))) }
+        let ceiling = Int(n * Self.commonTermThreshold)
+        idf = frequency.reduce(into: [:]) { result, pair in
+            let (term, df) = pair
+            result[term] = df > ceiling ? 0 : max(0, log((n + 1) / (Double(df) + 1)))
+        }
     }
 
     /// Fraction of the query's *evidential weight* found in this text.
@@ -86,6 +99,7 @@ nonisolated struct LexicalIndex {
             guard word.count >= 3, word.contains(where: { $0.isLetter || $0.isNumber }) else {
                 return true
             }
+            if Self.stopwords.contains(String(word)) { return true }
             if let tag, Self.functionWordClasses.contains(tag) { return true }
             terms.append(String(word))
             return true
@@ -96,5 +110,34 @@ nonisolated struct LexicalIndex {
     /// Grammatical classes that carry structure rather than meaning.
     private static let functionWordClasses: Set<NLTag> = [
         .determiner, .preposition, .conjunction, .pronoun, .particle, .interjection
+    ]
+
+    /// A floor under the tagger.
+    ///
+    /// `NLTagger` is context-dependent, which is usually its strength and here
+    /// its weakness: it correctly drops "about" from "nervous about the future"
+    /// and *keeps* it in the fragment "the about have with", because there's no
+    /// grammar left to parse. Queries are frequently fragments.
+    ///
+    /// Frequency cutoffs don't cover it either — in a twelve-entry corpus a word
+    /// can be pure noise and still appear in only a third of entries.
+    ///
+    /// So: both. The tagger generalizes across languages and inflections; this
+    /// list guarantees the worst offenders never ground a result. Standard
+    /// practice in information retrieval, and the pragmatic answer over an
+    /// elegant one that measurably fails.
+    private static let stopwords: Set<String> = [
+        "about", "after", "again", "against", "all", "also", "and", "any", "are",
+        "because", "been", "before", "being", "both", "but", "can", "cannot",
+        "could", "did", "does", "doing", "done", "down", "during", "each",
+        "even", "ever", "every", "for", "from", "had", "has", "have", "having",
+        "her", "here", "hers", "him", "his", "how", "into", "its", "itself",
+        "just", "like", "made", "make", "many", "may", "might", "more", "most",
+        "much", "must", "not", "now", "off", "once", "only", "other", "our",
+        "out", "over", "own", "same", "she", "should", "some", "such", "than",
+        "that", "the", "their", "them", "then", "there", "these", "they",
+        "this", "those", "through", "too", "under", "until", "very", "was",
+        "were", "what", "when", "where", "which", "while", "who", "whom",
+        "why", "will", "with", "would", "you", "your", "yours",
     ]
 }

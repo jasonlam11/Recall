@@ -96,3 +96,25 @@ extension LexicalIndexTests {
         #expect(index.score(query: "the fox", against: docs[0]) == 1.0)
     }
 }
+
+extension LexicalIndexTests {
+
+    /// The bug this guards: "have" is tagged a verb by NLTagger, so grammatical
+    /// filtering keeps it. On its own it let the query "the about have with"
+    /// return three confident results against a corpus about nothing of the
+    /// kind. Frequency catches what grammar misses.
+    @Test("A term in more than half the corpus carries no evidence")
+    func commonTermsCarryNoEvidence() {
+        let docs = [
+            "i have been running most mornings",
+            "i have a meeting about the roadmap",
+            "i have not called home in weeks",
+            "kayaking on the river at dawn",
+        ]
+        let index = LexicalIndex(documents: docs)
+        // "have" is in 3 of 4 — above the half-corpus threshold.
+        #expect(index.score(query: "have", against: docs[0]) == 0)
+        // A genuinely rare term still scores.
+        #expect(index.score(query: "kayaking", against: docs[3]) == 1.0)
+    }
+}

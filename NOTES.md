@@ -679,3 +679,69 @@ entries enriched under an older prompt shouldn't be stuck with it.
 as work rather than a frozen pane. The detail view is keyed with `.id(entry.id)`
 so switching selection builds a fresh view model instead of carrying edit state
 between entries.
+
+---
+
+## 2026-09-01 — Evaluation harness, and the bug it caught immediately
+
+`Evaluation/` — 12-entry labeled corpus, 12 labeled queries, compiled against the
+*real* `Ranker`, `LexicalIndex`, and `Vector` sources rather than a copy. Reports
+P@1, Recall@3, MRR, and abstention, sweeps weights, ablates signals, and exits
+nonzero below a floor so it can gate CI.
+
+**First run: overall 0.575, abstention 0.00.** Both queries that should return
+nothing returned confident results — "kayaking submarine trombone" produced two
+matches.
+
+**Why the unit tests missed it.** `RankerTests.noFalsePositives` passes because
+its fixtures have no embeddings, so the vector silently contributes zero. With
+real vectors every entry scores nonzero and clears the floor. A fixture that
+omits a field doesn't test the code that reads it.
+
+### Three fixes, each measured
+
+**1. The vector may reorder, never admit.** A result now requires at least one
+grounded signal — a matched term, topic, person, or mood. Vector similarity can
+reshuffle candidates that already have evidence; it can't introduce one.
+**0.575 → 0.700.**
+
+**2. Common-term cutoff.** A term in more than half the corpus scores zero
+regardless of grammatical class. Didn't fix the stopword query on its own.
+
+**3. A stopword list under the tagger.** `tokenize("the about have with")`
+returned `["about", "have"]` — and "about" is correctly dropped from "nervous
+about the future". `NLTagger` is *context-dependent*: given a fragment with no
+grammar to parse, it mis-tags. Queries are frequently fragments.
+
+Frequency cutoffs don't cover this either; in a twelve-entry corpus a word can be
+pure noise and appear in only a third of entries.
+
+So both: the tagger generalizes across inflections and languages, the list is a
+floor under the worst offenders. Standard IR practice, and the pragmatic answer
+over an elegant one that measurably fails. **0.700 → 0.838, abstention 1.00.**
+
+### Final numbers
+
+```
+P@1 0.80   Recall@3 0.75   MRR 0.80   Abstention 1.00   Overall 0.838
+```
+
+### What the sweep actually says
+
+57 of 75 configurations tie at 0.838. The shipping weights are tied for best —
+but so is almost everything else, including `lexical = 0`. **The query set is too
+small to discriminate between weightings.** It validates correctness, not tuning.
+Claiming these weights are empirically optimal would overstate what 12 queries
+can show. Fixing that means more labeled queries, not more sweeping.
+
+Ablation is more informative: removing the vector costs 0.042 and drops P@1 from
+0.80 to 0.70, so it earns its 0.15. Removing topic/person changes nothing on this
+set, which is a real question mark over those two signals.
+
+### The remaining honest failure
+
+"nervous about the future" and "feeling behind on everything" still miss. Neither
+shares a term with its targets, and the vector doesn't bridge it. That gap is not
+fixable at the retrieval layer — it's what Ask mode's query expansion is for, and
+in testing the model did exactly that, turning "anxious" into "job search"
+unprompted. Retrieval indexes; the model supplies the semantics.

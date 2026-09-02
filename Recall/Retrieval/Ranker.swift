@@ -55,6 +55,9 @@ nonisolated struct Ranker {
         /// Kept separately so evaluation can attribute a result to a signal.
         let lexical: Float
         let vector: Float
+        /// Evidence from everything except the vector. A result with none of
+        /// this is a guess.
+        let grounded: Bool
     }
 
     struct Weights {
@@ -140,18 +143,25 @@ nonisolated struct Ranker {
                 score += weights.mood
                 reasons.append("mood: \(mood.rawValue)")
             }
+            let grounded = !reasons.isEmpty
             if reasons.isEmpty && score > 0 { reasons.append("similar in meaning") }
 
             return Scored(candidate: candidate, score: score, reasons: reasons,
-                          lexical: lexical, vector: vector)
+                          lexical: lexical, vector: vector, grounded: grounded)
         }
 
-        // When the query matches real words somewhere, trust that and drop
-        // candidates held up only by the weak vector signal. When nothing
-        // matches lexically, the vector ranks — the case it exists for.
-        if scored.contains(where: { $0.lexical > 0 }) {
-            scored = scored.filter { $0.lexical > 0 || $0.score >= weights.lexical * 0.5 }
-        }
+        // The vector may reorder results; it may never admit one.
+        //
+        // Evaluation caught this: with real embeddings every entry scores
+        // nonzero, so "kayaking submarine trombone" returned two confident
+        // matches and a query of pure stopwords returned three. Abstention was
+        // 0.00. The unit tests missed it because their fixtures had no
+        // embeddings, which made the vector silently contribute nothing.
+        //
+        // Requiring at least one grounded signal — a matched term, topic,
+        // person, or mood — means a query with no real evidence returns
+        // nothing, which is the honest answer.
+        scored = scored.filter(\.grounded)
 
         return scored
             .filter { $0.score >= weights.floor }

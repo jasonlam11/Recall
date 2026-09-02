@@ -1,0 +1,14 @@
+[
+ {"query":"wayfair","relevant":["1"],"note":"rare proper noun, single entry"},
+ {"query":"gym","relevant":["3"],"note":"topic term"},
+ {"query":"priya","relevant":["6"],"note":"person name"},
+ {"query":"gaming","relevant":["8"],"note":"topic term"},
+ {"query":"interview prep","relevant":["2"],"note":"multi-word topic"},
+ {"query":"basketball with friends","relevant":["4"],"note":"topic plus function words"},
+ {"query":"nervous about the future","relevant":["1","2"],"note":"no shared vocabulary with targets"},
+ {"query":"feeling behind on everything","relevant":["5","1"],"note":"paraphrase, no shared terms"},
+ {"query":"who have I spent time with","relevant":["4","7"],"note":"question form, stopword heavy"},
+ {"query":"unfinished work conversations","relevant":["12","6"],"note":"paraphrase of open loops"},
+ {"query":"the about have with","relevant":[],"note":"pure stopwords, must return nothing"},
+ {"query":"kayaking submarine trombone","relevant":[],"note":"absent terms, must return nothing"}
+]
