@@ -1055,9 +1055,9 @@ tokenize("kestrel work")  -> ["work"]
 tokenize("kestrel offer") -> ["offer"]
 ```
 
-**Searching for an unusual name could return nothing.** "Wayfair" happened to tag
-as a noun, so the bug was invisible for as long as the fixture used a word the
-tagger recognised.
+**Searching for an unusual name could return nothing.** The previous fixture
+happened to use a proper noun the tagger recognised as a noun, so the bug stayed
+invisible for as long as the test data avoided the case that triggers it.
 
 This is the second failure from the same property — the tagger is contextual, and
 queries are fragments where context is missing. First it kept a stopword; now it
