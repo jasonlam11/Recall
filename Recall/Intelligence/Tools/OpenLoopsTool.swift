@@ -55,10 +55,12 @@ struct OpenLoopsTool: Tool {
         }
 
         audit.record(withLoops.map { Citation.id(for: $0) })
-        return withLoops.map { entry in
+        let payload = withLoops.map { entry in
             let date = entry.createdAt.formatted(.dateTime.month().day())
             let loops = (entry.insight?.openLoops ?? []).map { "- " + $0 }.joined(separator: "\n")
             return "[\(Citation.id(for: entry))] \(date)\n\(loops)"
         }.joined(separator: "\n\n")
+        audit.record(payload: payload)
+        return payload
     }
 }

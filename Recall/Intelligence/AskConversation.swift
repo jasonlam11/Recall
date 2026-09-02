@@ -28,6 +28,7 @@ final class AskConversation {
 
     private let session: LanguageModelSession
     private let audit: ToolAudit
+    let budget = ContextBudget()
 
     /// Rules for the model. These live in `instructions` — the protected channel
     /// — because journal text arriving through tool output is untrusted data and
@@ -57,6 +58,7 @@ final class AskConversation {
     init(tools: [any Tool], audit: ToolAudit) {
         self.audit = audit
         session = LanguageModelSession(tools: tools) { Self.instructions }
+        Task { await budget.recordInstructions(Self.instructions) }
     }
 
     var canSend: Bool { !isResponding }
@@ -110,6 +112,11 @@ final class AskConversation {
             messages[index].text = snapshot.content
         }
         messages[index].citations = audit.surfaced
+        await budget.record(
+            question: question,
+            answer: messages[index].text,
+            toolOutput: audit.payloads
+        )
     }
 
     /// Failures worth retrying: an internal generation fault, as opposed to a
@@ -132,6 +139,8 @@ final class AskConversation {
         messages = []
         errorMessage = nil
         audit.reset()
+        budget.reset()
+        Task { await budget.recordInstructions(Self.instructions) }
     }
 
     private static func describe(_ error: LanguageModelSession.GenerationError?) -> String {

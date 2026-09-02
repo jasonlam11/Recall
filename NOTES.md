@@ -850,3 +850,35 @@ generation failures.
 **Still needed: the demo GIF.** A journaling app with no screenshot asks the
 reader to imagine it. Record with ⌘⇧5: write an entry, watch tags stream in,
 search by meaning, ask a question, click a citation through to its entry.
+
+---
+
+## 2026-09-01 — Making the context window visible
+
+The 4096-token window was a hard limit the user couldn't see and hadn't agreed
+to. The app let them reach it and *then* reported failure.
+
+`ContextBudget` counts what each exchange spends and Ask mode shows roughly how
+many remain, turning amber near the end with an inline reset.
+
+**Counting tool output was the part that needed design.** Tool results go
+straight into the transcript — the framework inserts them, the caller never sees
+them — and they're usually the largest part of a turn: ~290 tokens for five
+entries against ~10 for a question. `ToolAudit` already existed for citations, so
+it also records the payloads, and the budget can account for the cost that was
+otherwise invisible.
+
+**It's an accounting, not a reading.** This tracks what the app contributed, not
+the framework's own transcript bookkeeping, so it will drift. Hence a 500-token
+reserve held back for the answer still to come, and a display deliberately phrased
+as "about N exchanges left" rather than a precise count. Showing a false precision
+would be worse than showing an approximation.
+
+**Cost per turn is measured, not assumed.** `exchangesRemaining` divides the
+remaining budget by *this conversation's* average turn cost. A question answered
+from one entry costs a fraction of one answered from five, so a constant guessed
+in advance would be wrong in both directions.
+
+Uses `contextSize` and `tokenCount`, the iOS 26.4 additions from WWDC26 session
+241 — with a character-count fallback if the count throws, so the indicator never
+silently freezes.

@@ -20,11 +20,23 @@ final class ToolAudit {
     /// Citation ids surfaced this turn, in the order the tools returned them.
     private(set) var surfaced: [Int] = []
 
-    func reset() { surfaced = [] }
+    /// Everything the tools returned this turn.
+    ///
+    /// Tool output goes into the transcript and costs context, but the caller
+    /// never sees it — the framework inserts it directly. Capturing it here is
+    /// the only way to account for the largest part of a turn's token cost.
+    private(set) var payloads: [String] = []
+
+    func reset() {
+        surfaced = []
+        payloads = []
+    }
 
     func record(_ ids: [Int]) {
         for id in ids where !surfaced.contains(id) {
             surfaced.append(id)
         }
     }
+
+    func record(payload: String) { payloads.append(payload) }
 }

@@ -111,8 +111,48 @@ struct AskView: View {
         return store.entries.first { $0.id == id }
     }
 
+    /// The context window made visible.
+    ///
+    /// A 4096-token budget is a hard limit the user cannot see and did not
+    /// agree to. Showing what's left turns "this conversation got too long"
+    /// from a failure into a decision they get to make in advance.
+    @ViewBuilder
+    private var budgetBar: some View {
+        let budget = conversation.budget
+        if budget.turns > 0 {
+            HStack(spacing: 8) {
+                ProgressView(value: min(budget.fraction, 1))
+                    .progressViewStyle(.linear)
+                    .frame(width: 90)
+                    .tint(budget.isRunningLow ? .orange : .secondary)
+
+                if budget.exchangesRemaining <= 0 {
+                    Text("Conversation is full")
+                        .foregroundStyle(.orange)
+                    Button("Start a new one") { conversation.reset() }
+                        .buttonStyle(.link)
+                } else {
+                    Text("about \(budget.exchangesRemaining) exchange\(budget.exchangesRemaining == 1 ? "" : "s") left")
+                        .foregroundStyle(budget.isRunningLow ? .orange : .secondary)
+                    if budget.isRunningLow {
+                        Button("New conversation") { conversation.reset() }
+                            .buttonStyle(.link)
+                    }
+                }
+                Spacer()
+            }
+            .font(.caption)
+            .padding(.horizontal, 14)
+            .padding(.top, 8)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("About \(budget.exchangesRemaining) exchanges left in this conversation")
+        }
+    }
+
     @ViewBuilder
     private var composer: some View {
+        VStack(spacing: 0) {
+        budgetBar
         HStack(spacing: 8) {
             TextField("Ask about your entries", text: $draft, axis: .vertical)
                 .textFieldStyle(.plain)
@@ -127,6 +167,7 @@ struct AskView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+        }
         .background(.quaternary.opacity(0.3))
     }
 

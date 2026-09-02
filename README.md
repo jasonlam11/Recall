@@ -82,6 +82,11 @@ built on guided generation, there's no separate "structure the question" pass an
 no way to emit a malformed query. Asked "why have I been anxious lately?", the
 model searched `["anxious"]`, then expanded to `["job search"]` on its own.
 
+**Token accounting.** `contextSize` and `tokenCount` are used to track what each
+exchange spends — question, answer, and tool output, which is usually the largest
+part — and Ask mode shows roughly how many exchanges remain before the window
+fills.
+
 **Two tools, because not every question is a search.** `listOpenLoops` is a
 projection over structured data. Asked what he'd said he would follow up on, the
 model searched for "follow up" — but open loops say things like *"official offer
@@ -179,8 +184,10 @@ model failure.
   ("nervous about the future"). Ask mode handles them, because the model expands
   the query; search alone does not.
 - The evaluation set is too small to tune weights against.
-- The 4096-token context window bounds conversation length. Handled by failing
-  clearly and offering a fresh conversation, not by real transcript management.
+- The 4096-token context window bounds conversation length. Ask mode shows the
+  remaining budget so resetting is a choice rather than a recovery, but there is
+  no transcript summarisation or trimming — a full conversation must be
+  discarded.
 - The framework intermittently fails generation (`com.apple.tokengeneration`),
   roughly a third of requests in testing. Retried once; not otherwise mitigated.
 - Answer quality varies. Some answers quote precisely; others are vague.

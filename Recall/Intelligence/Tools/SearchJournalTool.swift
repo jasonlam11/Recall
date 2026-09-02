@@ -86,7 +86,9 @@ struct SearchJournalTool: Tool {
             return Self.noMatches(in: store.entries)
         }
         audit.record(results.map { Citation.id(for: $0.entry) })
-        return results.map(Self.render).joined(separator: "\n\n")
+        let payload = results.map(Self.render).joined(separator: "\n\n")
+        audit.record(payload: payload)
+        return payload
     }
 
     /// What to say when nothing matched.
