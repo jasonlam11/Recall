@@ -33,7 +33,7 @@ struct ContentView: View {
     /// a feature that doesn't exist.
     @ViewBuilder
     private var modePicker: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Theme.Space.tight) {
             Button {
                 isAsking = false
                 selection = nil
@@ -69,8 +69,8 @@ struct ContentView: View {
                 .accessibilityLabel("Start a new conversation")
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.top, 10)
+        .padding(.horizontal, Theme.Space.snug)
+        .padding(.top, Theme.Space.snug)
     }
 
     private var isWriting: Bool { !isAsking && selection == nil }
@@ -84,11 +84,11 @@ struct ContentView: View {
         NavigationSplitView {
             VStack(spacing: 0) {
                 modePicker
-                Divider()
                 TimelineView(store: store, selection: $selection, search: search)
             }
+            .background(Theme.paper)
             .navigationTitle("Recall")
-            .frame(minWidth: 300)
+            .frame(minWidth: 320)
         } detail: {
             // Three modes in one column, driven by two pieces of state. Selecting
             // an entry always wins over asking, since it's the more specific

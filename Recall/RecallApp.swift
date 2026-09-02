@@ -48,6 +48,7 @@ struct RecallApp: App {
                 conversation: conversation
             )
         }
-        .defaultSize(width: 1000, height: 700)
+        .defaultSize(width: 1040, height: 760)
+        .windowResizability(.contentMinSize)
     }
 }

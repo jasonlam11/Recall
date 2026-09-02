@@ -2,9 +2,9 @@ import SwiftUI
 
 /// Full view of a single entry: what was written, and what the model made of it.
 ///
-/// The raw text is always primary. Derived metadata sits below it and is clearly
-/// secondary — the writer's own words are the record, the model's reading of
-/// them is commentary.
+/// The writing is primary and set in serif; derived metadata sits below a rule
+/// in interface type. The distinction is the point — the writer's words are the
+/// record, the model's reading is commentary.
 struct EntryDetailView: View {
     let entry: JournalEntry
     @State private var model: EntryDetailViewModel
@@ -16,40 +16,49 @@ struct EntryDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: Theme.Space.loose) {
                 header
-                if model.isEditing { editor } else { body(of: entry) }
-                Divider()
+                if model.isEditing { editor } else { writing }
+                Divider().overlay(Theme.rule)
                 analysis
                 if let message = model.errorMessage {
                     Label(message, systemImage: "exclamationmark.triangle")
-                        .font(.footnote).foregroundStyle(.secondary)
+                        .font(Theme.Font.meta)
+                        .foregroundStyle(Theme.inkSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .frame(maxWidth: 640, alignment: .leading)
-            .padding(28)
+            .frame(maxWidth: Theme.readingWidth, alignment: .leading)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, Theme.Space.wide)
+            .padding(.vertical, Theme.Space.page)
         }
+        .background(Theme.paper)
+        .animation(.smooth(duration: 0.3), value: model.isEditing)
+        .animation(.smooth(duration: 0.3), value: model.isAnalyzing)
     }
 
     // MARK: - Header
 
     @ViewBuilder
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(entry.insight?.title ?? "Untitled")
-                .font(.largeTitle.bold())
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 10) {
-                Text(entry.createdAt, format: .dateTime.weekday(.wide).month().day().hour().minute())
-                if let mood = entry.insight?.mood {
-                    Label(mood.rawValue.capitalized, systemImage: mood.symbolName)
-                }
-                Spacer()
-                actions
+        VStack(alignment: .leading, spacing: Theme.Space.tight) {
+            HStack(alignment: .top) {
+                Text(entry.insight?.title ?? "Untitled")
+                    .font(Theme.Font.display)
+                    .foregroundStyle(Theme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: Theme.Space.normal)
+                HStack(spacing: Theme.Space.tight) { actions }
             }
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
+            HStack(spacing: Theme.Space.tight) {
+                Text(entry.createdAt, format: .dateTime.weekday(.wide).month(.wide).day().hour().minute())
+                if let mood = entry.insight?.mood {
+                    Chip(text: mood.rawValue.capitalized, symbol: mood.symbolName, tint: mood.tint)
+                }
+            }
+            .font(Theme.Font.meta)
+            .foregroundStyle(Theme.inkFaint)
         }
     }
 
@@ -64,39 +73,46 @@ struct EntryDetailView: View {
         } else {
             Button("Edit", systemImage: "pencil") { model.beginEditing() }
                 .buttonStyle(.bordered)
+                .labelStyle(.iconOnly)
+                .help("Edit this entry")
                 .disabled(model.isAnalyzing)
             Button("Re-analyze", systemImage: "arrow.clockwise") {
                 Task { await model.reanalyze() }
             }
             .buttonStyle(.bordered)
-            .disabled(!model.canReanalyze)
+            .labelStyle(.iconOnly)
             .help("Run the analysis again with the current prompts")
+            .disabled(!model.canReanalyze)
         }
     }
 
-    // MARK: - Body
+    // MARK: - Writing
 
     @ViewBuilder
-    private func body(of entry: JournalEntry) -> some View {
+    private var writing: some View {
         Text(entry.text)
-            .font(.body)
+            .font(Theme.Font.entryLarge)
+            .foregroundStyle(Theme.ink)
+            .lineSpacing(Theme.proseLineSpacing)
             .textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder
     private var editor: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Theme.Space.tight) {
             TextEditor(text: $model.draft)
-                .accessibilityLabel("Entry text")
-                .font(.body)
+                .font(Theme.Font.entryLarge)
+                .foregroundStyle(Theme.ink)
+                .lineSpacing(Theme.proseLineSpacing)
                 .scrollContentBackground(.hidden)
-                .padding(12)
-                .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 12))
-                .frame(minHeight: 200)
-            Text("Saving re-runs the analysis, since the summary, tags, and search index all describe the old text.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .padding(Theme.Space.snug)
+                .background(Theme.surface, in: .rect(cornerRadius: Theme.Radius.card))
+                .frame(minHeight: 240)
+                .accessibilityLabel("Entry text")
+            Text("Saving re-runs the analysis — the summary, tags, and search index all describe the old text.")
+                .font(Theme.Font.meta)
+                .foregroundStyle(Theme.inkFaint)
         }
     }
 
@@ -107,32 +123,39 @@ struct EntryDetailView: View {
         if model.isAnalyzing {
             analyzing
         } else if let insight = entry.insight {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: Theme.Space.loose) {
                 section("Summary") {
-                    Text(insight.summary).fixedSize(horizontal: false, vertical: true)
+                    Text(insight.summary)
+                        .font(Theme.Font.entry)
+                        .lineSpacing(Theme.proseLineSpacing - 2)
+                        .foregroundStyle(Theme.inkSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                if !insight.people.isEmpty {
-                    section("People") { chips(insight.people, symbol: "person") }
-                }
-                if !insight.topics.isEmpty {
-                    section("Topics") { chips(insight.topics, symbol: "tag") }
+                if !insight.people.isEmpty || !insight.topics.isEmpty {
+                    section("Mentions") {
+                        FlowRow(spacing: Theme.Space.hair) {
+                            ForEach(insight.people, id: \.self) { Chip(text: $0, symbol: "person") }
+                            ForEach(insight.topics, id: \.self) { Chip(text: $0, symbol: "tag") }
+                        }
+                    }
                 }
                 if !insight.openLoops.isEmpty {
-                    section("Open loops") {
-                        VStack(alignment: .leading, spacing: 6) {
+                    section("Still open") {
+                        VStack(alignment: .leading, spacing: Theme.Space.hair) {
                             ForEach(insight.openLoops, id: \.self) { loop in
                                 Label(loop, systemImage: "arrow.turn.down.right")
+                                    .font(Theme.Font.label)
+                                    .foregroundStyle(Theme.inkSecondary)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                         }
                     }
                 }
             }
-            .font(.callout)
         } else {
             Label("Not analyzed", systemImage: "circle.dashed")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+                .font(Theme.Font.label)
+                .foregroundStyle(Theme.inkFaint)
         }
     }
 
@@ -140,45 +163,37 @@ struct EntryDetailView: View {
     /// work happening rather than a frozen pane.
     @ViewBuilder
     private var analyzing: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: Theme.Space.snug) {
+            HStack(spacing: Theme.Space.tight) {
                 ProgressView().controlSize(.small)
                 Text(model.partial?.title ?? "Analyzing…")
-                    .font(.headline)
+                    .font(Theme.Font.title)
+                    .foregroundStyle(Theme.ink)
                     .contentTransition(.opacity)
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Analyzing entry")
+
             if let summary = model.partial?.summary {
                 Text(summary)
-                    .font(.callout).foregroundStyle(.secondary)
+                    .font(Theme.Font.entry)
+                    .foregroundStyle(Theme.inkSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let topics = model.partial?.topics, !topics.isEmpty {
-                chips(topics, symbol: "tag")
+                FlowRow(spacing: Theme.Space.hair) {
+                    ForEach(topics, id: \.self) { Chip(text: $0, symbol: "tag") }
+                }
             }
         }
-        .animation(.snappy, value: model.partial?.title)
+        .animation(.smooth(duration: 0.3), value: model.partial?.title)
     }
 
     @ViewBuilder
     private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.caption.bold()).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: Theme.Space.tight) {
+            SectionLabel(text: title)
             content()
-        }
-    }
-
-    @ViewBuilder
-    private func chips(_ items: [String], symbol: String) -> some View {
-        // Read as one list rather than a run of unrelated buttons.
-        HStack(spacing: 6) {
-            ForEach(items, id: \.self) { item in
-                Label(item, systemImage: symbol)
-                    .font(.caption)
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(.quaternary.opacity(0.5), in: .capsule)
-            }
         }
     }
 }

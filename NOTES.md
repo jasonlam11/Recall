@@ -882,3 +882,52 @@ in advance would be wrong in both directions.
 Uses `contextSize` and `tokenCount`, the iOS 26.4 additions from WWDC26 session
 241 — with a character-count fallback if the count throws, so the indicator never
 silently freezes.
+
+---
+
+## 2026-09-02 — Visual design pass
+
+The app worked and read as a form with an AI attached. Six changes, in order of
+how much each moved that.
+
+**A theme.** Padding values were 4, 6, 8, 10, 12, 14, 16, 24, and 28, chosen per
+view. `Theme` defines a 4pt spacing scale, a type scale, semantic colours, and
+two shared components (`Chip`, `SectionLabel`). The difference between a screen
+that looks composed and one that looks assembled is mostly this.
+
+**Warm paper, not grey.** Colour assets with light and dark variants: off-white
+`#FAF7F2` over warm charcoal `#1A1714`, ink at `#2B2622` rather than black, and a
+muted terracotta accent. Deliberately not pure white or pure black — paper isn't,
+and the warmth is most of what makes a writing surface feel inviting rather than
+clinical.
+
+**Serif for the writing, system for the interface.** Entry text, model summaries,
+and answers are serif with 1.5x line spacing on a 620pt measure. Labels, buttons,
+and metadata stay in the system face. The split does real work: at a glance you
+can tell the writer's words from the app's chrome, which matters in an app whose
+whole premise is separating those two things.
+
+**The composer stopped being a form.** The bordered `TextEditor` box is gone —
+text now sits directly on the page with a placeholder. The giant "New Entry"
+heading is replaced by the date, which is what a journal actually wants to say.
+A word count replaces empty space.
+
+**The timeline is grouped by day.** Eleven equally weighted rows is a table;
+Today / Yesterday / weekday makes it a journal, and makes gaps visible, which is
+itself information about how you've been writing. Each row carries a 2pt mood
+rule so the list can be scanned by feeling before it's read.
+
+**`FlowRow`.** Chips were in an `HStack` and clipped as soon as the model
+returned five topics, which it routinely does. A tiny `Layout` conformance wraps
+them. Found by looking, not by testing — layout bugs don't fail builds.
+
+**Mood has colour.** Seven desaturated hues, used in the row rule and the chip.
+They sit behind text and must never shout, so saturation stays low.
+
+**Not verified.** I can't see the app. This is a design pass reasoned from the
+code and two screenshots; whether it actually looks right is a judgement I can't
+make from here.
+
+**Still needed: an app icon.** Shipping the Xcode default is the loudest
+remaining signal that this is a student project, and it appears in the Dock, the
+demo recording, and every screenshot.
