@@ -40,6 +40,29 @@ final class JournalStore {
         return entry
     }
 
+    /// Replaces an entry's text and discards everything derived from it.
+    ///
+    /// Clearing `insight` and `embedding` is the point, not housekeeping. Stale
+    /// derived data makes search silently lie: an entry edited to be about a
+    /// thesis would still surface for "gym", because the old topics and vector
+    /// still describe text that no longer exists. Better to show an entry as
+    /// unanalyzed than to describe it wrongly.
+    func update(_ entry: JournalEntry, text: String) throws {
+        entry.text = text
+        entry.insight = nil
+        entry.embedding = nil
+        try context.save()
+        refresh()
+    }
+
+    /// Discards derived data without touching the writing, for re-analysis.
+    func clearDerivedData(for entry: JournalEntry) throws {
+        entry.insight = nil
+        entry.embedding = nil
+        try context.save()
+        refresh()
+    }
+
     func attach(_ insight: EntryInsight, to entry: JournalEntry) throws {
         entry.insight = insight
         try context.save()

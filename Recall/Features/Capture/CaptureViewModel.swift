@@ -17,11 +17,13 @@ final class CaptureViewModel {
     private let store: JournalStore
     private let intelligence: any IntelligenceService
     private let indexer: Indexer
+    private let enricher: EntryEnricher
 
     init(store: JournalStore, intelligence: any IntelligenceService, indexer: Indexer) {
         self.store = store
         self.intelligence = intelligence
         self.indexer = indexer
+        self.enricher = EntryEnricher(store: store, intelligence: intelligence, indexer: indexer)
     }
 
     var canSave: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isEnriching }
@@ -59,34 +61,14 @@ final class CaptureViewModel {
         isEnriching = true
         defer { isEnriching = false }
 
-        var last: EntryInsight.PartiallyGenerated?
+        // 4. Enrich, persist, and re-index. A failure here leaves a valid,
+        //    unenriched entry — the writing is already safe.
         do {
-            for try await snapshot in intelligence.enrichStream(entryText: body) {
-                partial = snapshot
-                last = snapshot
-            }
+            try await enricher.enrich(entry) { partial = $0 }
         } catch let error as IntelligenceError {
             errorMessage = error.errorDescription
-            return
         } catch {
             errorMessage = error.localizedDescription
-            return
         }
-
-        // 4. Only persist metadata once it's actually complete.
-        guard let last, let insight = EntryInsight(completed: last) else {
-            errorMessage = "The analysis came back incomplete. Your entry is saved."
-            return
-        }
-        do {
-            try store.attach(insight, to: entry)
-        } catch {
-            errorMessage = "Saved the entry, but couldn't save its analysis."
-            return
-        }
-
-        // 5. Re-index now that the summary and topics exist — they carry more
-        //    signal than raw prose alone.
-        await indexer.reindex(entry)
     }
 }

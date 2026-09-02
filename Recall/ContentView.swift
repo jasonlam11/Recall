@@ -6,6 +6,7 @@ struct ContentView: View {
     let intelligence: any IntelligenceService
     let indexer: Indexer
     let conversation: AskConversation
+    let enricher: EntryEnricher
 
     @State private var selection: PersistentIdentifier?
     @State private var isAsking = false
@@ -22,6 +23,7 @@ struct ContentView: View {
         self.intelligence = intelligence
         self.indexer = indexer
         self.conversation = conversation
+        self.enricher = EntryEnricher(store: store, intelligence: intelligence, indexer: indexer)
         _search = State(initialValue: SearchViewModel(retrieval: retrieval, store: store))
     }
 
@@ -89,7 +91,10 @@ struct ContentView: View {
             // an entry always wins over asking, since it's the more specific
             // intent.
             if let selectedEntry {
-                EntryDetailView(entry: selectedEntry)
+                // Keyed by entry so switching selection builds a fresh view
+                // model rather than carrying edit state between entries.
+                EntryDetailView(entry: selectedEntry, store: store, enricher: enricher)
+                    .id(selectedEntry.id)
             } else if isAsking {
                 AskView(store: store, conversation: conversation) { id in
                     selection = id

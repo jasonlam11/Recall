@@ -646,3 +646,36 @@ not a defense.
 
 Cost: fewer system affordances. Worth it for the two controls that are the whole
 app.
+
+---
+
+## 2026-09-01 — Editing, and why it's really a cache-invalidation problem
+
+Editing an entry is not a text update. `insight` and `embedding` are both
+*derived* from the text, so changing the text invalidates them.
+
+Leaving them stale would make search silently lie: edit an entry to be about a
+thesis and it would still surface for "gym", because the stored topics and vector
+describe text that no longer exists. Wrong answers with no visible cause are
+worse than missing ones, so `JournalStore.update(_:text:)` clears both. An entry
+briefly showing "Not analyzed" is honest; an entry described by its own past is
+not.
+
+**Ordering.** The text commits first and separately, then analysis runs. If
+analysis fails the edit still stands and the entry is simply unanalyzed. Same
+principle as capture: the writing is never at the mercy of the model.
+
+**`EntryEnricher`.** Editing needed the exact sequence capture already used —
+stream, refuse to store a partial insight, re-index once summary and topics
+exist. Extracted rather than duplicated, because the *ordering* is the part
+that's easy to get wrong, and two copies means two chances.
+
+**Re-analyze.** Same machinery, without touching the text. Directly useful right
+now: early entries list the writer themselves and bare pronouns as people,
+written before those instructions were fixed. Prompts improve over time, and
+entries enriched under an older prompt shouldn't be stuck with it.
+
+**UI.** Re-analysis renders the same streaming fill as the composer, so it reads
+as work rather than a frozen pane. The detail view is keyed with `.id(entry.id)`
+so switching selection builds a fresh view model instead of carrying edit state
+between entries.
