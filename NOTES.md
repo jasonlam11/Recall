@@ -543,3 +543,87 @@ it before relying on it — and if it doesn't help, delete it.
 the main thread idled (a `pkill` from a test run). Distinguishing "was killed"
 from "crashed" is worth being able to do at a glance: a crash shows an exception
 or a fatal signal like SIGSEGV/SIGABRT, and the paused frame is in your code.
+
+---
+
+## 2026-09-01 — F4: Ask mode, and four failed designs for citations
+
+Tool calling works and query understanding is the real win. For "Why have I been
+anxious lately?" the model searched `terms: ["anxious"]`, got one hit, then
+expanded to `["job search"]` on its own. That synonym expansion is exactly what
+`Ranker` cannot do and why the natural-language gap needed the model, not better
+term matching.
+
+**The argument schema *is* query understanding.** Because tool calling is built
+on guided generation, `SearchJournalTool.Arguments` — terms, optional mood,
+optional timeframe — is the parse step. No separate "structure the question"
+pass, and constrained decoding means the model can't emit a malformed query.
+
+### Citations: four attempts
+
+1. **Ask in `instructions`.** "Cite every claim with the bracketed id." Produced
+   *zero* citations. Instructions are a request the model may decline.
+2. **Make the answer `@Generable`** with a `citedEntryIDs` field. Citations
+   appeared — but the call failed to decode when the session also had tools (the
+   model emitted prose the framework couldn't coerce), and when it succeeded the
+   prose got markedly worse: "You've gone to the gym a few times recently"
+   versus an unconstrained answer that quoted the user's own words back.
+   **Guided generation is for extraction, not narration.**
+3. **Extract citations from the finished prose** with a second, tool-less
+   guided call. Reliable mechanically, and *hallucinated*: it returned ids 1–8
+   from text containing no ids, against a corpus numbered 2–12. False provenance
+   is strictly worse than none.
+4. **Record what the tools returned.** `ToolAudit`. The retrieval layer already
+   knows the ground truth, so provenance is recorded where it's known instead of
+   inferred from what the model claims. Unfakeable: the sources shown are exactly
+   the entries the model was given.
+
+The general lesson: **don't ask a model to report on itself when a deterministic
+layer already knows the answer.**
+
+### Two tools, because some questions aren't searches
+
+"What did I say I'd follow up on?" made the model search for "follow up" — and
+the words in `openLoops` are things like "official offer from Wayfair", never
+the phrase "follow up". No term matching bridges that gap.
+
+`OpenLoopsTool` is a projection, not a search: it reads the structured field
+directly. Some questions are retrieval, some are lookups. A tool per shape beats
+one tool pretending to cover both.
+
+### A bare "no results" caused a retry loop
+
+The model mutated its own query across four calls — `["follow up"]` →
+`["follow-up"]` → `["follow-up-up"]` → `["follow-up-up-up"]` — then the request
+failed outright. The tool now names the topics that *do* appear in the journal,
+giving the model something to correct toward or grounds to stop. Instructions
+also cap it at two searches for the same thing.
+
+### The framework fails intermittently
+
+`com.apple.tokengeneration Code=10`, surfaced as `GenerationError -1`. Same
+binary, same corpus, same questions: run 1 failed 3 of 4, run 2 failed a
+different one. Not input-dependent — the failure moves.
+
+`AskConversation` retries once, but only for faults classified transient.
+Guardrail violations, exceeded context, and unsupported language will fail
+identically the second time, so retrying them just doubles the wait.
+
+### Also fixed: `openLoops` was unsearchable
+
+`Ranker.Candidate.searchableText` included title, summary, topics, and people but
+not `openLoops`. A field the model populates and retrieval ignores is worse than
+no field at all.
+
+### Still open
+
+- Whether the model's judgment actually beats the weighted formula. Unanswered:
+  the model calls the tool and accepts what comes back rather than reranking. A
+  real test needs a labeled question set with expected entries — the Week 3
+  harness.
+- Answer quality varies. "You've been doing leetcoding, specifically the Neetcode
+  150" is good; "You've been to the gym three times in the past few days. Here
+  are the entries that mention the gym:" trails off mid-thought.
+- The 4096-token window bounds conversation length. Currently handled by letting
+  it fail and offering "New Conversation", which is honest but crude. Real
+  transcript management is unbuilt.

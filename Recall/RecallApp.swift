@@ -10,6 +10,8 @@ struct RecallApp: App {
     private let intelligence: any IntelligenceService
     private let retrieval: RetrievalService
     private let indexer: Indexer
+    private let conversation: AskConversation
+    private let audit: ToolAudit
 
     init() {
         do {
@@ -21,6 +23,19 @@ struct RecallApp: App {
         let embeddings = EmbeddingService()
         retrieval = RetrievalService(embeddings: embeddings)
         indexer = Indexer(store: store, embeddings: embeddings)
+
+        // The model reaches the journal only through tools, and tools only
+        // through the retrieval layer. Wiring that here keeps the dependency
+        // direction visible in one place.
+        let audit = ToolAudit()
+        self.audit = audit
+        conversation = AskConversation(
+            tools: [
+                SearchJournalTool(store: store, retrieval: retrieval, audit: audit),
+                OpenLoopsTool(store: store, audit: audit),
+            ],
+            audit: audit
+        )
     }
 
     var body: some Scene {
@@ -29,7 +44,8 @@ struct RecallApp: App {
                 store: store,
                 intelligence: intelligence,
                 retrieval: retrieval,
-                indexer: indexer
+                indexer: indexer,
+                conversation: conversation
             )
         }
         .defaultSize(width: 1000, height: 700)

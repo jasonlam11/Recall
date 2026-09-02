@@ -70,6 +70,7 @@ final class RetrievalService {
             topics: entry.insight?.topics ?? [],
             people: entry.insight?.people ?? [],
             mood: entry.insight?.mood,
+            openLoops: entry.insight?.openLoops ?? [],
             embedding: entry.embedding
         )
     }

@@ -17,22 +17,32 @@ nonisolated struct Ranker {
         let topics: [String]
         let people: [String]
         let mood: Mood?
+        let openLoops: [String]
         let embedding: [Float]?
 
         init(
             id: String, text: String, title: String = "", summary: String = "",
             topics: [String] = [], people: [String] = [], mood: Mood? = nil,
-            embedding: [Float]? = nil
+            openLoops: [String] = [], embedding: [Float]? = nil
         ) {
             self.id = id; self.text = text; self.title = title; self.summary = summary
             self.topics = topics; self.people = people; self.mood = mood
-            self.embedding = embedding
+            self.openLoops = openLoops; self.embedding = embedding
         }
 
         /// Everything a query may legitimately match: the writer's own words
         /// first, then the model's derived metadata.
+        /// Everything a query may legitimately match.
+        ///
+        /// `openLoops` was missing here at first, which made the one question the
+        /// field exists to answer — "what did I say I'd follow up on?" — return
+        /// nothing. A field the model populates but retrieval ignores is worse
+        /// than no field.
         var searchableText: String {
-            [text, title, summary, topics.joined(separator: " "), people.joined(separator: " ")]
+            [text, title, summary,
+             topics.joined(separator: " "),
+             people.joined(separator: " "),
+             openLoops.joined(separator: " ")]
                 .filter { !$0.isEmpty }
                 .joined(separator: " ")
         }

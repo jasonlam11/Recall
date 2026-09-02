@@ -5,14 +5,23 @@ struct ContentView: View {
     let store: JournalStore
     let intelligence: any IntelligenceService
     let indexer: Indexer
+    let conversation: AskConversation
 
     @State private var selection: PersistentIdentifier?
+    @State private var isAsking = false
     @State private var search: SearchViewModel
 
-    init(store: JournalStore, intelligence: any IntelligenceService, retrieval: RetrievalService, indexer: Indexer) {
+    init(
+        store: JournalStore,
+        intelligence: any IntelligenceService,
+        retrieval: RetrievalService,
+        indexer: Indexer,
+        conversation: AskConversation
+    ) {
         self.store = store
         self.intelligence = intelligence
         self.indexer = indexer
+        self.conversation = conversation
         _search = State(initialValue: SearchViewModel(retrieval: retrieval, store: store))
     }
 
@@ -27,16 +36,38 @@ struct ContentView: View {
                 .navigationTitle("Recall")
                 .frame(minWidth: 300)
                 .toolbar {
-                    Button("New Entry", systemImage: "square.and.pencil") {
+                    Button("Ask", systemImage: "bubble.left.and.text.bubble.right") {
+                        isAsking = true
                         selection = nil
                     }
-                    .disabled(selection == nil)
+                    .disabled(isAsking)
+
+                    Button("New Entry", systemImage: "square.and.pencil") {
+                        isAsking = false
+                        selection = nil
+                    }
+                    .disabled(!isAsking && selection == nil)
+
+                    // The transcript lives in the session and the context
+                    // window is 4096 tokens, so a long conversation has to be
+                    // discardable rather than silently trimmed.
+                    Button("New Conversation", systemImage: "arrow.counterclockwise") {
+                        conversation.reset()
+                        isAsking = true
+                        selection = nil
+                    }
+                    .disabled(conversation.messages.isEmpty)
                 }
         } detail: {
-            // No selection means "compose". Selecting an entry replaces the
-            // editor with that entry — one column, two modes, no tab bar.
+            // Three modes in one column, driven by two pieces of state. Selecting
+            // an entry always wins over asking, since it's the more specific
+            // intent.
             if let selectedEntry {
                 EntryDetailView(entry: selectedEntry)
+            } else if isAsking {
+                AskView(store: store, conversation: conversation) { id in
+                    selection = id
+                }
             } else {
                 CaptureView(store: store, intelligence: intelligence, indexer: indexer)
             }

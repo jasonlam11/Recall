@@ -1,0 +1,131 @@
+import SwiftData
+import SwiftUI
+
+struct AskView: View {
+    let store: JournalStore
+    @Bindable var conversation: AskConversation
+    /// Selecting a citation opens that entry in the detail pane.
+    var onSelectEntry: (PersistentIdentifier) -> Void
+
+    @State private var draft = ""
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    if conversation.messages.isEmpty { emptyState }
+                    ForEach(conversation.messages) { message in
+                        bubble(message)
+                    }
+                    if let error = conversation.errorMessage {
+                        Label(error, systemImage: "exclamationmark.triangle")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxWidth: 680, alignment: .leading)
+                .padding(24)
+            }
+            Divider()
+            composer
+        }
+    }
+
+    @ViewBuilder
+    private var emptyState: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Ask your journal").font(.largeTitle.bold())
+            Text("Questions are answered only from your own entries, on this device.")
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(["Why have I been anxious lately?",
+                         "What keeps coming up about work?",
+                         "What did I say I'd follow up on?"], id: \.self) { example in
+                    Button(example) { draft = example }
+                        .buttonStyle(.link)
+                        .font(.callout)
+                }
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    @ViewBuilder
+    private func bubble(_ message: AskConversation.Message) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(message.role == .user ? "You" : "Recall")
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+
+            if message.text.isEmpty && conversation.isResponding {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Searching your entries…").font(.callout).foregroundStyle(.secondary)
+                }
+            } else {
+                Text(message.text)
+                    .font(.body)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if !message.citations.isEmpty {
+                citations(message.citations)
+            }
+        }
+    }
+
+    /// Citations are rendered as controls, not decoration — the point of citing
+    /// is that the user can check the model's work.
+    @ViewBuilder
+    private func citations(_ ids: [Int]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Sources").font(.caption.bold()).foregroundStyle(.secondary)
+            ForEach(ids, id: \.self) { id in
+                if let entry = entry(for: id) {
+                    Button {
+                        onSelectEntry(entry.id)
+                    } label: {
+                        Label("[\(id)] \(entry.insight?.title ?? "Untitled")", systemImage: "text.quote")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.link)
+                } else {
+                    // The model cited an id that doesn't resolve — worth showing
+                    // rather than hiding, since it means it invented one.
+                    Label("[\(id)] unknown entry", systemImage: "questionmark.circle")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func entry(for citation: Int) -> JournalEntry? {
+        guard let id = Citation.entryID(for: citation) else { return nil }
+        return store.entries.first { $0.id == id }
+    }
+
+    @ViewBuilder
+    private var composer: some View {
+        HStack(spacing: 8) {
+            TextField("Ask about your entries", text: $draft, axis: .vertical)
+                .textFieldStyle(.plain)
+                .lineLimit(1...4)
+                .onSubmit(send)
+            Button("Ask", systemImage: "arrow.up.circle.fill", action: send)
+                .labelStyle(.iconOnly)
+                .buttonStyle(.plain)
+                .font(.title2)
+                .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty || !conversation.canSend)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.quaternary.opacity(0.3))
+    }
+
+    private func send() {
+        let question = draft
+        guard !question.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        draft = ""
+        Task { await conversation.ask(question) }
+    }
+}
