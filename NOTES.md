@@ -798,3 +798,55 @@ there was never a reason to skip it.
 The 87-token instructions and 59-token entry against a 4096-token window confirm
 the tool-payload budgeting: five full-text hits at ~58 tokens each is ~7% of
 context.
+
+---
+
+## 2026-09-01 — Accessibility pass
+
+Focused on the two things that actually break VoiceOver rather than a blanket
+sweep:
+
+**Icon-only controls had no label.** The Ask send button, the search clear
+button, the new-conversation button, and both progress spinners announced as
+"button" or nothing. All labelled.
+
+**Composite rows read as fragments.** A timeline row is a title, a date, a
+summary, a mood, and two topics — six separate announcements to swipe through for
+one entry. `.accessibilityElement(children: .combine)` makes it one, matching
+what a sighted user perceives. Same for the streaming insight card and the
+"searching" state.
+
+**Speaker attribution in Ask.** "You" and "Recall" are visual captions above each
+message. Read separately, a VoiceOver user loses track of who said what across a
+scroll, so the caption is hidden and folded into the message's own label.
+
+**Mode buttons carry `.isSelected`.** Tint communicates the active mode visually
+and nothing otherwise.
+
+Dynamic Type needed no work — every font is semantic (`.body`, `.headline`,
+`.caption`) and the layouts that could truncate already use
+`.fixedSize(horizontal: false, vertical: true)` from the earlier truncation bug.
+
+**Not verified.** I can't run VoiceOver from here. This is a code-level pass
+against known failure modes, not a tested one. Worth an actual pass with
+VoiceOver on (⌘F5) before claiming it's accessible.
+
+---
+
+## 2026-09-01 — README
+
+Written for the person who opens the repo from a referral and gives it ninety
+seconds. Leads with the problem, not the feature list; states the two
+architectural rules the code actually holds to; and puts the measured findings —
+the failed embeddings, the four citation designs, the deleted `prewarm()` — above
+the API tour, because those are the parts that show engineering judgment rather
+than framework familiarity.
+
+Numbers are quoted from the harnesses in the repo, so anyone can reproduce them.
+The weight sweep is reported as inconclusive rather than as validation, and
+limitations are listed honestly, including the framework's intermittent
+generation failures.
+
+**Still needed: the demo GIF.** A journaling app with no screenshot asks the
+reader to imagine it. Record with ⌘⇧5: write an entry, watch tags stream in,
+search by meaning, ask a question, click a citation through to its entry.

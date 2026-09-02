@@ -14,6 +14,7 @@ struct CaptureView: View {
             header
 
             TextEditor(text: $model.text)
+                .accessibilityLabel("Journal entry")
                 .font(.body)
                 .scrollContentBackground(.hidden)
                 .padding(12)
@@ -83,7 +84,10 @@ private struct InsightCard: View {
                         .labelStyle(.titleAndIcon)
                         .foregroundStyle(.secondary)
                 }
-                if isStreaming { ProgressView().controlSize(.small) }
+                if isStreaming {
+                    ProgressView().controlSize(.small)
+                        .accessibilityLabel("Analyzing entry")
+                }
             }
 
             if let summary = partial.summary {
@@ -114,6 +118,9 @@ private struct InsightCard: View {
         }
         .padding(16)
         .background(.quaternary.opacity(0.3), in: .rect(cornerRadius: 12))
+        // Announced as it fills in, so a VoiceOver user hears the analysis
+        // arrive rather than discovering it later by exploring.
+        .accessibilityElement(children: .combine)
     }
 }
 

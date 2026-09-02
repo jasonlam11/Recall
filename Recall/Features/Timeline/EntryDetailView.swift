@@ -88,6 +88,7 @@ struct EntryDetailView: View {
     private var editor: some View {
         VStack(alignment: .leading, spacing: 6) {
             TextEditor(text: $model.draft)
+                .accessibilityLabel("Entry text")
                 .font(.body)
                 .scrollContentBackground(.hidden)
                 .padding(12)
@@ -146,6 +147,8 @@ struct EntryDetailView: View {
                     .font(.headline)
                     .contentTransition(.opacity)
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Analyzing entry")
             if let summary = model.partial?.summary {
                 Text(summary)
                     .font(.callout).foregroundStyle(.secondary)
@@ -168,6 +171,7 @@ struct EntryDetailView: View {
 
     @ViewBuilder
     private func chips(_ items: [String], symbol: String) -> some View {
+        // Read as one list rather than a run of unrelated buttons.
         HStack(spacing: 6) {
             ForEach(items, id: \.self) { item in
                 Label(item, systemImage: symbol)

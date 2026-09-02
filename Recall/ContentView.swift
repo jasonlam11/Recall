@@ -43,6 +43,7 @@ struct ContentView: View {
             }
             .buttonStyle(.bordered)
             .tint(isWriting ? .accentColor : nil)
+            .accessibilityAddTraits(isWriting ? [.isSelected] : [])
 
             Button {
                 isAsking = true
@@ -53,6 +54,7 @@ struct ContentView: View {
             }
             .buttonStyle(.bordered)
             .tint(isAsking ? .accentColor : nil)
+            .accessibilityAddTraits(isAsking ? [.isSelected] : [])
 
             if isAsking && !conversation.messages.isEmpty {
                 // The transcript lives in the session and the window is 4096
@@ -64,6 +66,7 @@ struct ContentView: View {
                 }
                 .buttonStyle(.bordered)
                 .help("Start a new conversation")
+                .accessibilityLabel("Start a new conversation")
             }
         }
         .padding(.horizontal, 10)

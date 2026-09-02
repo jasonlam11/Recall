@@ -31,6 +31,7 @@ struct TimelineView: View {
                 .onSubmit { search.queryChanged() }
             if search.isSearching {
                 ProgressView().controlSize(.small)
+                    .accessibilityLabel("Searching")
             } else if search.isActive {
                 Button {
                     search.text = ""
@@ -39,6 +40,7 @@ struct TimelineView: View {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
             }
         }
         .padding(.horizontal, 10)
@@ -117,5 +119,8 @@ struct TimelineView: View {
             }
         }
         .padding(.vertical, 4)
+        // Without this VoiceOver reads a row as five disconnected fragments.
+        // Combined, it reads as one entry the way a sighted user sees it.
+        .accessibilityElement(children: .combine)
     }
 }

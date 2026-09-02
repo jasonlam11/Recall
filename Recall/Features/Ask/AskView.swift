@@ -55,17 +55,23 @@ struct AskView: View {
             Text(message.role == .user ? "You" : "Recall")
                 .font(.caption.bold())
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
 
             if message.text.isEmpty && conversation.isResponding {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
                     Text("Searching your entries…").font(.callout).foregroundStyle(.secondary)
                 }
+                .accessibilityElement(children: .combine)
             } else {
                 Text(message.text)
                     .font(.body)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
+                    // The speaker is a visual caption above the text; folding it
+                    // into the label keeps VoiceOver from losing track of who
+                    // said what.
+                    .accessibilityLabel("\(message.role == .user ? "You asked" : "Recall answered"): \(message.text)")
             }
 
             if !message.citations.isEmpty {
@@ -89,6 +95,7 @@ struct AskView: View {
                             .font(.caption)
                     }
                     .buttonStyle(.link)
+                    .accessibilityLabel("Open source entry: \(entry.insight?.title ?? "Untitled")")
                 } else {
                     // The model cited an id that doesn't resolve — worth showing
                     // rather than hiding, since it means it invented one.
@@ -115,6 +122,7 @@ struct AskView: View {
                 .labelStyle(.iconOnly)
                 .buttonStyle(.plain)
                 .font(.title2)
+                .accessibilityLabel("Send question")
                 .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty || !conversation.canSend)
         }
         .padding(.horizontal, 14)
