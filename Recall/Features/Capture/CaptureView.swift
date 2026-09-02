@@ -12,7 +12,7 @@ struct CaptureView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Space.loose) {
+            VStack(alignment: .leading, spacing: Theme.Space.normal) {
                 header
                 editor
                 footer
@@ -68,7 +68,10 @@ struct CaptureView: View {
                 .scrollContentBackground(.hidden)
                 .background(.clear)
                 .focused($isWriting)
-                .frame(minHeight: 220)
+                // Capped, because a TextEditor inside a ScrollView expands to
+                // fill whatever it's offered — which left ~450pt of dead space
+                // between the placeholder and the Save button.
+                .frame(minHeight: 160, maxHeight: 300)
                 .accessibilityLabel("Journal entry")
         }
     }

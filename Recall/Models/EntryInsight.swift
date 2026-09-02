@@ -1,3 +1,4 @@
+import Foundation
 import FoundationModels
 
 /// Structured metadata the on-device model extracts from a journal entry.
@@ -29,6 +30,28 @@ nonisolated struct EntryInsight: Codable, Sendable, Equatable {
 }
 
 extension EntryInsight {
+
+    /// Removes values that describe the absence of a value.
+    ///
+    /// Asked for people in an entry mentioning none, the model returned
+    /// `["no people"]` — and the UI dutifully rendered a chip reading "no
+    /// people". The instructions now forbid it, but instructions are a request
+    /// the model may decline, so this is the guarantee.
+    ///
+    /// Matching is exact against a small set plus "no <field name>", rather
+    /// than any string starting with "no". A journal entry can legitimately be
+    /// about "no sleep" or "no response", and dropping those would be a worse
+    /// bug than the one being fixed.
+    static func dropPlaceholders(_ values: [String], named field: String) -> [String] {
+        let rejected: Set<String> = [
+            "none", "n/a", "na", "nothing", "unknown", "not applicable",
+            "no \(field)", field
+        ]
+        return values.filter { value in
+            let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return !normalized.isEmpty && !rejected.contains(normalized)
+        }
+    }
     /// Assembles a finished insight from the last streamed snapshot.
     ///
     /// `PartiallyGenerated` has every property optional because a snapshot can
@@ -40,9 +63,9 @@ extension EntryInsight {
               let mood = partial.mood else { return nil }
         self.title = title
         self.summary = summary
-        self.people = partial.people ?? []
-        self.topics = partial.topics ?? []
+        self.people = Self.dropPlaceholders(partial.people ?? [], named: "people")
+        self.topics = Self.dropPlaceholders(partial.topics ?? [], named: "topics")
         self.mood = mood
-        self.openLoops = partial.openLoops ?? []
+        self.openLoops = Self.dropPlaceholders(partial.openLoops ?? [], named: "open loops")
     }
 }

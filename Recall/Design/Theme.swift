@@ -106,6 +106,21 @@ struct Chip: View {
     }
 }
 
+extension View {
+    /// Prominent when active, plain otherwise.
+    ///
+    /// `PrimitiveButtonStyle` conformances are distinct types, so a ternary
+    /// can't select between them — this needs a branch in the view builder.
+    @ViewBuilder
+    func modeButtonStyle(active: Bool) -> some View {
+        if active {
+            buttonStyle(.borderedProminent)
+        } else {
+            buttonStyle(.bordered)
+        }
+    }
+}
+
 /// A quiet section heading.
 struct SectionLabel: View {
     let text: String

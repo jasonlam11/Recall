@@ -134,13 +134,16 @@ struct TimelineView: View {
                 .padding(.vertical, 2)
 
             VStack(alignment: .leading, spacing: Theme.Space.hair) {
+                // `.primary` and `.secondary` invert against the selection
+                // highlight; an explicit colour does not, which left selected
+                // rows as dark text on a dark accent fill.
                 Text(entry.insight?.title ?? "Untitled")
                     .font(.headline)
-                    .foregroundStyle(Theme.ink)
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
                 Text(entry.insight?.summary ?? entry.text)
                     .font(Theme.Font.meta)
-                    .foregroundStyle(Theme.inkSecondary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(2)
                 if !reasons.isEmpty {
                     // Why this entry matched, so ranking isn't a black box.

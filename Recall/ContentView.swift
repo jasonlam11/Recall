@@ -41,8 +41,7 @@ struct ContentView: View {
                 Label("Write", systemImage: "square.and.pencil")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
-            .tint(isWriting ? .accentColor : nil)
+            .modeButtonStyle(active: isWriting)
             .accessibilityAddTraits(isWriting ? [.isSelected] : [])
 
             Button {
@@ -52,8 +51,7 @@ struct ContentView: View {
                 Label("Ask", systemImage: "bubble.left.and.text.bubble.right")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
-            .tint(isAsking ? .accentColor : nil)
+            .modeButtonStyle(active: isAsking)
             .accessibilityAddTraits(isAsking ? [.isSelected] : [])
 
             if isAsking && !conversation.messages.isEmpty {

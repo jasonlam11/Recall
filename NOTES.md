@@ -931,3 +931,36 @@ make from here.
 **Still needed: an app icon.** Shipping the Xcode default is the loudest
 remaining signal that this is a student project, and it appears in the Dock, the
 demo recording, and every screenshot.
+
+---
+
+## 2026-09-02 — Three problems only a screenshot could show
+
+**1. Selected rows were illegible.** Dark text on a solid terracotta fill. Cause:
+row text used explicit `Theme.ink` / `Theme.inkSecondary`, and an explicit colour
+defeats the system's selection-contrast inversion. `.primary` and `.secondary`
+invert; a hardcoded colour doesn't.
+
+Worth generalising: **inside a selectable `List` row, use semantic foreground
+styles.** Design-system colours are right everywhere else and wrong here.
+
+**2. The model returned "no people" as a person.** The chip read *"no people"*,
+and open loops listed *"no open loops"* — the model answering the question in
+prose instead of returning an empty array.
+
+Fixed in the instructions, and then guaranteed in code, because instructions are
+a request the model may decline. `EntryInsight.dropPlaceholders` matches exactly
+against a small set plus "no <field name>" — deliberately *not* any string
+starting with "no", because an entry can legitimately be about "no sleep" or "no
+response from Wayfair". Dropping those would be a worse bug than the one being
+fixed. Three tests cover both directions.
+
+**3. ~450pt of dead space in the composer.** A `TextEditor` inside a `ScrollView`
+expands to fill whatever height it's offered, so `minHeight: 220` became 450 and
+the Save button floated in the middle of an empty page, with the insight card
+pushed far below the text it described. Capped with `maxHeight`.
+
+**None of these were visible from the code**, and none would fail a build or a
+test. The selection bug needed a selected row, the placeholder bug needed an
+entry mentioning nobody, and the layout bug needed a window. Screenshots have now
+found six defects in this project — more than any other single method.
