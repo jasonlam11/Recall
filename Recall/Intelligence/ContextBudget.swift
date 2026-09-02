@@ -32,11 +32,10 @@ final class ContextBudget {
     /// Held back so the model always has room to answer.
     private static let reserve = 500
 
-    /// How many recent turns the estimate averages over.
+    /// How many recent turns the estimate looks at.
     ///
     /// Averaging the whole conversation lets one cheap turn raise the estimate,
-    /// so "exchanges left" can go *up* while usage only ever goes up too. A
-    /// short trailing window tracks what turns actually cost now.
+    /// so "exchanges left" could go *up* while usage only ever goes up too.
     private static let window = 3
 
     /// Used before any turn has completed: instructions, a short question,
@@ -69,7 +68,15 @@ final class ContextBudget {
     static func exchanges(remaining: Int, turnCosts: [Int]) -> Int {
         let recent = turnCosts.suffix(window)
         guard !recent.isEmpty else { return max(1, remaining / firstTurnGuess) }
-        let perTurn = max(1, recent.reduce(0, +) / recent.count)
+        // The most expensive recent turn, not the average.
+        //
+        // This is a warning, and the two ways of being wrong are not
+        // symmetrical: underestimating means the user resets sooner than they
+        // had to, overestimating means they hit an error mid-answer. Several
+        // short turns followed by a long one is a normal pattern — a few
+        // one-line questions, then pasting in something substantial — and a
+        // mean would stay optimistic right up until the long turn landed.
+        let perTurn = max(1, recent.max() ?? firstTurnGuess)
         return remaining / perTurn
     }
 

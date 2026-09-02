@@ -557,8 +557,28 @@ rather than by using it:
 
 **Extracted the arithmetic as a pure static function** so it can be tested
 without a loaded model — same reasoning that pulled `Ranker` out of
-`RetrievalService`. Six tests cover the window behaviour, rounding direction,
-and division by a zero-cost turn.
+`RetrievalService`.
+
+**Then a third problem, from asking what happens with a few short turns and one
+long one.** A mean over the window stays optimistic right up until the expensive
+turn lands, which is the wrong direction for a warning: underestimating means the
+user resets sooner than necessary, overestimating means they hit an error
+mid-answer. Those costs aren't symmetrical. The estimate now uses the
+**costliest** recent turn, not the average. Short questions followed by a long
+one is a normal pattern — a few one-liners, then pasting something substantial.
+
+**And the bug that question actually uncovered: `OpenLoopsTool` had no limit.**
+`SearchJournalTool` was capped from the start at five hits of 600 characters,
+about 750 tokens. `OpenLoopsTool` returned *every* entry with an unresolved
+thread — fine at twelve entries, thousands of tokens against a 4096-token window
+after a year of writing. One tool call could exhaust the context on its own.
+
+It was missed because a projection over structured fields doesn't feel like it
+has anything to bound; a search obviously does. Now capped at the twelve most
+recent, and the payload *says* how many were omitted so the model reports a
+partial answer as partial rather than answering confidently from a subset.
+
+Eight tests cover the estimate, including the short-then-long pattern.
 
 Uses `contextSize` and `tokenCount`, the iOS 26.4 additions from WWDC26 session
 241 — with a character-count fallback if the count throws, so the indicator never

@@ -52,3 +52,26 @@ struct ContextBudgetTests {
         #expect(ContextBudget.exchanges(remaining: 2399, turnCosts: [400]) == 5)
     }
 }
+
+extension ContextBudgetTests {
+
+    /// The pattern that motivated using the costliest recent turn rather than
+    /// the mean: several short questions, then a long one. A mean stays
+    /// optimistic until the long turn has already landed.
+    @Test("Short turns followed by a long one give a conservative estimate")
+    func shortThenLong() {
+        let shortTurns = ContextBudget.exchanges(remaining: 2400, turnCosts: [120, 120, 120])
+        let afterOneLong = ContextBudget.exchanges(remaining: 2400, turnCosts: [120, 120, 1200])
+        #expect(afterOneLong < shortTurns, "one expensive turn should lower the estimate")
+        // 2400 / 1200 = 2, not 2400 / 480 = 5.
+        #expect(afterOneLong == 2)
+    }
+
+    @Test("A single cheap turn after an expensive one stays cautious")
+    func doesNotBounceBackImmediately() {
+        // The expensive turn is still inside the window, so the estimate
+        // shouldn't leap back up on one cheap exchange.
+        let estimate = ContextBudget.exchanges(remaining: 2400, turnCosts: [1200, 100])
+        #expect(estimate == 2)
+    }
+}
