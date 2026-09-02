@@ -1069,3 +1069,10 @@ search by meaning, ask a question, click a citation through to its entry.
   entries, where centering has more to work with.
 - **Answer quality varies** and isn't measured. Some answers quote precisely;
   others trail off mid-thought. There is no rubric for this yet.
+- **Citations show everything retrieved, not everything used.** `ToolAudit`
+  records what the tools surfaced, which is what makes provenance unfakeable —
+  but a broad search can attach seven source chips to a one-sentence answer.
+  Honest, and it reads as over-citing. Narrowing it means asking the model which
+  entries it actually used, which is the self-report that hallucinated ids. The
+  better fix is probably a label that says "entries searched" rather than
+  implying each one supports a claim.

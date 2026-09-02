@@ -11,8 +11,22 @@ Everything runs locally. No network, no account, no API key.
 
 **Swift · SwiftUI · SwiftData · Foundation Models · Natural Language**
 
-<!-- TODO: demo.gif — record with ⌘⇧5, showing: write an entry, tags stream in,
-     search by meaning, ask a question, click through to a cited entry. -->
+![The composer, with a saved entry's extracted metadata](docs/composer.png)
+
+*Writing an entry. The model extracts a title, summary, mood, people, topics, and
+unresolved threads, streaming each field in as it generates. All of it on-device.*
+
+![Asking a question, answered with citations](docs/ask.png)
+
+*Ask mode. The model turns the question into a structured query, retrieves through
+tool calls, and answers from the entries it was given — each one a link back to
+the source. The bar above the input shows how much of the 4096-token context
+window is left.*
+
+![Searching by meaning](docs/search.png)
+
+*Search over the writing and the extracted metadata together, with the reason each
+entry matched shown beneath it.*
 
 ---
 
