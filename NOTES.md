@@ -964,3 +964,32 @@ pushed far below the text it described. Capped with `maxHeight`.
 test. The selection bug needed a selected row, the placeholder bug needed an
 entry mentioning nobody, and the layout bug needed a window. Screenshots have now
 found six defects in this project — more than any other single method.
+
+---
+
+## 2026-09-02 — App icon
+
+Two lines of writing with a thread running through them, ending in a loop — the
+throughline the app is for. Three colours, all from `Theme`.
+
+**Three variants, because the platforms want different things.** macOS bakes the
+rounded rect into the image and expects the artwork inset to an 824/1024 content
+area with transparency outside, so the Dock silhouette is correct. iOS is full
+bleed and masked by the system. The dark variant inverts the paper and keeps the
+accent.
+
+**Weights are heavier than they look right at 1024.** An icon is designed for
+32px and merely inspected at full size. The first draft had 100pt bars and a
+56pt stroke, which is ~3px and ~1.75px in the Dock — mush. Now 96pt bars and a
+76pt stroke, with the second line shortened so two equal bars don't read as an
+equals sign.
+
+**Rasterised with `qlmanage`**, which ships on every Mac. Installing a Homebrew
+SVG converter for three files would be a dependency the next person has to
+discover. `Design/render-icons.sh` regenerates all twelve PNGs from source, so
+the SVGs are the artefact under version control rather than a folder of bitmaps
+nobody can edit.
+
+Verified in the built bundle rather than by the build succeeding: `AppIcon.icns`
+is present in `Contents/Resources`, `CFBundleIconName` is set, and `assetutil`
+lists `AppIcon` in the compiled catalogue.
